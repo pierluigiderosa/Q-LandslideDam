@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Cornice esterna arrotondata -->
+  <rect x="2" y="2" width="60" height="60" rx="4" ry="4" fill="none" stroke="#2C3E50" stroke-width="2.5"/>
+
+  <!-- TERRENO IN POSTO (Sfondo base che copre tutto il fondo del rettangolo) -->
+  <path d="M 4 24 
+           C 16 28, 28 42, 34 52 
+           C 38 58, 44 58, 50 54 
+           L 60 52 L 60 62 L 4 62 Z" 
+        fill="#8D5B4C" stroke="#4A2E2B" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- ACQUA NELL'ALVEO (Riempie l'avvallamento senza fessure) -->
+  <path d="M 30.5 52 
+           C 34 57, 39 57, 44 56.5 
+           C 48 56, 52 54, 55.5 52 Z" 
+        fill="#29B6F6"/>
+        
+  <!-- Pelo libero dell'acqua (Linea orizzontale perfetta) -->
+  <line x1="30.5" y1="52" x2="55.5" y2="52" stroke="#0288D1" stroke-width="1.5"/>
+
+  <!-- MASSA DI FRANA (Diedro ocra/arancione che si sovrappone esattamente alla nicchia) -->
+  <path d="M 12 26 
+           C 20 30, 26 38, 30.5 52 
+           L 32 46 
+           C 26 34, 18 28, 12 26 Z" 
+        fill="#FB8C00" stroke="#E65100" stroke-width="1.5" stroke-linejoin="round"/>
+        
+  <!-- Superficie di scivolamento (Tratteggio interno) -->
+  <path d="M 12 26 C 20 30, 26 38, 30.5 52" stroke="#B71C1C" stroke-width="1" stroke-dasharray="1.5,1.5" fill="none"/>
+</svg>
