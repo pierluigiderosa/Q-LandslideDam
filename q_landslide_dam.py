@@ -33,6 +33,7 @@ from qgis.core import (QgsSettings,
                        )
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
+from qgis.gui import QgsMapToolEmitPoint
 
 import os
 import tempfile
@@ -193,6 +194,23 @@ class QLandslideDam:
                 action)
             self.iface.removeToolBarIcon(action)
 
+    def activate_point_tool(self):
+        """Riduce a icona la finestra della GUI e attiva il cursore di selezione sulla mappa."""
+        self.dlg.hide()  # Nasconde temporaneamente il dialogo per liberare la mappa
+        self.iface.mapCanvas().setMapTool(self.click_tool)
+
+    def on_point_captured(self, point, button):
+        """Slot richiamato al click sulla mappa: imposta le coordinate e riapre la GUI."""
+        # Inserisce le coordinate catturate nelle due SpinBox
+        self.dlg.spin_x.setValue(point.x())
+        self.dlg.spin_y.setValue(point.y())
+
+        # Disattiva lo strumento mappa e ripristina il cursore di default
+        self.iface.mapCanvas().unsetMapTool(self.click_tool)
+
+        # Mostra nuovamente il dialogo del plugin
+        self.dlg.show()
+
     def save_and_load_raster(self, numpy_array, reference_layer, output_path, layer_name="DEM Modified"):
         """
         Salva la matrice NumPy come file GeoTIFF mantenendo il CRS, le dimensioni
@@ -340,9 +358,20 @@ class QLandslideDam:
             self.first_start = False
             self.dlg = QLandslideDamDialog()
 
+            # --- SBLOCCO PARTE INTERA E DECIMALI PER COORDINATE ---
+            self.dlg.spin_x.setRange(-999999999.0, 999999999.0)
+            self.dlg.spin_y.setRange(-999999999.0, 999999999.0)
+
             # --- CONFIGURAZIONE COMBOBOX RASTER ---
-            # Imposta il filtro per mostrare SOLO i layer Raster caricati in QGIS
+            # Filtro ComboBox solo per layer Raster
             self.dlg.DEM_raster_ComboBox.setFilters(QgsMapLayerProxyModel.RasterLayer)
+
+            # Collegamento del pulsante per catturare le coordinate dalla mappa
+            self.dlg.btn_select_point.clicked.connect(self.activate_point_tool)
+
+            # Creo la mappa/strumento di cattura una sola volta
+            self.click_tool = QgsMapToolEmitPoint(self.iface.mapCanvas())
+            self.click_tool.canvasClicked.connect(self.on_point_captured)
 
         # show the dialog
         self.dlg.show()
@@ -365,16 +394,23 @@ class QLandslideDam:
 
             volume = self.dlg.VolumeBox.value()
 
-            # Centro temporaneo basato sulla Bounding Box del DEM
-            extent = dem_layer.extent()
-            center_point = QgsPointXY(
-                extent.xMinimum() + extent.width() / 2.0,
-                extent.yMinimum() + extent.height() / 2.0
-            )
+            # --- RECUPERO COORDINATE DALLE SPINBOX DELLA GUI ---
+            x_coord = self.dlg.spin_x.value()
+            y_coord = self.dlg.spin_y.value()
+
+            # Controllo di sicurezza: verifica che le coordinate siano inserite
+            if x_coord == 0 and y_coord == 0:
+                self.iface.messageBar().pushWarning(
+                    "Attenzione",
+                    "Inserisci le coordinate X e Y oppure seleziona un punto sulla mappa."
+                )
+                return
+
+            center_point = QgsPointXY(x_coord, y_coord)
 
             # --- PUNTO CULMINALE FISSO PER TESTING ---
-            center_point = QgsPointXY(777549.0, 4780479.0)
-            #volume=15000
+            #center_point = QgsPointXY(777549.0, 4780479.0)
+
 
             # Esecuzione del calcolo
             final_dem, thickness, vol_calc, num_iter = self.calculate_landslide_dam_wedge(
