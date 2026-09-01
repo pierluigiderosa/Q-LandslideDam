@@ -22,14 +22,28 @@
  ***************************************************************************/
 """
 from qgis.PyQt.QtCore import QLocale, QTranslator, QCoreApplication
-from qgis.core import QgsSettings, QgsMapLayerProxyModel
+from qgis.core import (QgsSettings,
+                       QgsMapLayerProxyModel,
+                       QgsRasterLayer,
+                       QgsProject,
+                       QgsRasterBlock,
+                       QgsPointXY,
+                       QgsMessageLog,
+                       Qgis
+                       )
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
+
+import os
+import tempfile
+import time
+from osgeo import gdal, osr
 
 # Import the code for the dialog
 from .q_landslide_dam_dialog import QLandslideDamDialog
 import os.path
 import numpy as np
+from osgeo import gdal, osr
 
 
 class QLandslideDam:
@@ -179,14 +193,60 @@ class QLandslideDam:
                 action)
             self.iface.removeToolBarIcon(action)
 
+    def save_and_load_raster(self, numpy_array, reference_layer, output_path, layer_name="DEM Modified"):
+        """
+        Salva la matrice NumPy come file GeoTIFF mantenendo il CRS, le dimensioni
+        e il geotransform del DEM di riferimento, poi lo carica nella TOC di QGIS.
+        """
+        provider = reference_layer.dataProvider()
+        extent = reference_layer.extent()
+        cols = reference_layer.width()
+        rows = reference_layer.height()
+
+        crs = reference_layer.crs()
+        pixel_size_x = reference_layer.rasterUnitsPerPixelX()
+        pixel_size_y = reference_layer.rasterUnitsPerPixelY()
+
+        geotransform = (
+            extent.xMinimum(),
+            pixel_size_x,
+            0.0,
+            extent.yMaximum(),
+            0.0,
+            -pixel_size_y
+        )
+
+        driver = gdal.GetDriverByName('GTiff')
+        out_ds = driver.Create(output_path, cols, rows, 1, gdal.GDT_Float32)
+        out_ds.SetGeoTransform(geotransform)
+
+        srs = osr.SpatialReference()
+        srs.ImportFromWkt(crs.toWkt())
+        out_ds.SetProjection(srs.ExportToWkt())
+
+        band = out_ds.GetRasterBand(1)
+        nodata_val = provider.sourceNoDataValue(1)
+
+        if nodata_val is not None:
+            band.SetNoDataValue(nodata_val)
+            numpy_array = np.nan_to_num(numpy_array, nan=nodata_val)
+
+        band.WriteArray(numpy_array)
+        band.FlushCache()
+        out_ds = None  # Rilascia il file da GDAL
+
+        # Caricamento nella TOC
+        new_layer = QgsRasterLayer(output_path, layer_name)
+        if new_layer.isValid():
+            QgsProject.instance().addMapLayer(new_layer)
+            return new_layer
+        else:
+            self.iface.messageBar().pushCritical("Errore", "Impossibile caricare il raster generato.")
+            return None
 
     def calculate_landslide_dam_wedge(self, dem_layer, center_point, direction_deg,
                                       side_dip_deg, crest_slope_deg, target_volume_m3):
-        """
-        Replica la logica dello script GRASS GIS in PyQGIS + NumPy.
-        Calcola l'inviluppo di due piani inclinati e incrementa la quota base
-        finché il volume del cuneo sopra il DEM non raggiunge target_volume_m3.
-        """
+
         provider = dem_layer.dataProvider()
         extent = dem_layer.extent()
         cols = dem_layer.width()
@@ -213,74 +273,63 @@ class QLandslideDam:
         y_coords = np.linspace(extent.yMaximum() - pixel_size_y / 2.0, extent.yMinimum() + pixel_size_y / 2.0, rows)
         X, Y = np.meshgrid(x_coords, y_coords)
 
-        # Coordinate del centro della diga
         x0, y0 = center_point.x(), center_point.y()
         dX = X - x0
         dY = Y - y0
 
-        # Conversione angoli in radianti
+        # Conversione in radianti dell'Azimuth (0° Nord, 90° Est)
         azimuth_rad = np.radians(direction_deg)
-        # Tangente per l'inclinazione dei versanti (falde laterali)
         tan_side_dip = np.tan(np.radians(side_dip_deg))
-
-        # Tangente per la pendenza longitudinale della cresta
         tan_crest_slope = np.tan(np.radians(crest_slope_deg))
 
-
-        # Distanze parallela e perpendicolare rispetto all'asse della diga
+        # Distanze ruotate rispetto alla direzione della diga
         d_parallel = dX * np.sin(azimuth_rad) + dY * np.cos(azimuth_rad)
         d_perpendicular = dX * np.cos(azimuth_rad) - dY * np.sin(azimuth_rad)
 
-        # 3. Quota iniziale (quota del DEM nel punto centrale o minima nell'area)
-        # Convertiamo le coordinate del punto (X, Y) negli indici di Colonna e Riga della matrice DEM
+        # Distanze assolute per garantire la simmetria a cuneo
+        d_parallel_abs = np.abs(d_parallel)
+        d_perpendicular_abs = np.abs(d_perpendicular)
+
+        # 3. Quota iniziale nel punto centrale
         col_c = int((x0 - extent.xMinimum()) / pixel_size_x)
         row_c = int((extent.yMaximum() - y0) / pixel_size_y)
 
-        # Controllo che il punto cada all'interno della griglia del raster
         if 0 <= col_c < cols and 0 <= row_c < rows:
             start_elevation = dem_array[row_c, col_c]
             if np.isnan(start_elevation):
                 start_elevation = np.nanmin(dem_array)
         else:
-            # Se il punto è fuori dal raster, usa la quota minima del DEM
             start_elevation = np.nanmin(dem_array)
 
-        current_elevation = start_elevation
-
-
-        step_z = 0.5  # Passo di incremento della quota ad ogni iterazione (metri)
+        # Parametri di accrescimento
+        h = 0.0
+        step_h = 0.2  # incrementi di 20 cm
         calculated_volume = 0.0
-        max_iterations = 2000
+        max_iterations = 3000
         iteration = 0
 
         final_dam_dem = np.copy(dem_array)
         thickness_array = np.zeros_like(dem_array)
 
-        # 4. Ciclo di accrescimento del cuneo per raggiungere il Volume Target
+        # 4. Ciclo di accrescimento progressivo
         while calculated_volume < target_volume_m3 and iteration < max_iterations:
-            current_elevation += step_z
+            h += step_h
+            current_crest_elevation = start_elevation + h
 
-            # --- PIANI INCLINATI CON DUE INCLINAZIONI DISTINTE ---
-            # 1. d_parallel usa la pendenza della cresta (tan_crest_slope)
-            # 2. d_perpendicular usa l'inclinazione dei versanti (tan_side_dip)
-            piano1 = current_elevation - (d_parallel * tan_crest_slope) + (d_perpendicular * tan_side_dip)
-            piano2 = current_elevation - (d_parallel * tan_crest_slope) - (d_perpendicular * tan_side_dip)
+            # Tetto del cuneo: scende dal colmo sia lungo la cresta che lungo i versanti
+            dam_surface = current_crest_elevation - (d_parallel_abs * tan_crest_slope) - (
+                        d_perpendicular_abs * tan_side_dip)
 
-            # Inviluppo inferiore (diedro)
-            dam1 = np.minimum(piano1, piano2)
-
-            # Spessore accumulato sopra il terreno naturale
-            thickness = np.where(mask_valid & (dam1 > dem_array), dam1 - dem_array, 0.0)
+            # Calcolo dello spessore dove il cuneo supera il terreno
+            thickness = np.where(mask_valid & (dam_surface > dem_array), dam_surface - dem_array, 0.0)
             calculated_volume = np.sum(thickness) * cell_area
 
-            if calculated_volume >= target_volume_m3:
-                thickness_array = thickness
-                final_dam_dem = np.where(thickness > 0, dam1, dem_array)
-                break
+            thickness_array = thickness
+            final_dam_dem = np.where(thickness > 0, dam_surface, dem_array)
 
             iteration += 1
 
-        return final_dam_dem, thickness_array, calculated_volume
+        return final_dam_dem, thickness_array, calculated_volume, iteration
 
     def run(self):
         """Run method that performs all the real work"""
@@ -325,9 +374,10 @@ class QLandslideDam:
 
             # --- PUNTO CULMINALE FISSO PER TESTING ---
             center_point = QgsPointXY(777549.0, 4780479.0)
+            #volume=15000
 
             # Esecuzione del calcolo
-            final_dem, thickness, vol_calc = self.calculate_landslide_dam_wedge(
+            final_dem, thickness, vol_calc, num_iter = self.calculate_landslide_dam_wedge(
                 dem_layer=dem_layer,
                 center_point=center_point,
                 direction_deg=direction,
@@ -336,7 +386,24 @@ class QLandslideDam:
                 target_volume_m3=volume
             )
 
-            self.iface.messageBar().pushInfo(
-                "Q-LandslideDam",
-                f"Modellazione completata! Volume diga: {vol_calc:.1f} m³"
+            # --- DEFINIZIONE PERCORSO PER WINDOWS ---
+            # Usiamo la cartella Temp di sistema (es. C:\Users\Nome\AppData\Local\Temp)
+            # e aggiungiamo un timestamp al nome del file per evitare sovrascritture bloccate da QGIS
+            temp_dir = tempfile.gettempdir()
+            timestamp = int(time.time())
+            filename = f"landslide_dam_{timestamp}.tif"
+            output_file = os.path.join(temp_dir, filename)
+
+            # Salva su disco e carica nella TOC
+            loaded_layer = self.save_and_load_raster(
+                numpy_array=final_dem,
+                reference_layer=dem_layer,
+                output_path=output_file,
+                layer_name=f"DEM Diga ({vol_calc:.0f} m³)"
             )
+
+            if loaded_layer:
+                self.iface.messageBar().pushInfo(
+                    "Q-LandslideDam",
+                    f"Iterazioni: {num_iter} | Volume richiesto: {volume} m³ | Volume ottenuto: {vol_calc:.1f} m³"
+                )
