@@ -22,13 +22,14 @@
  ***************************************************************************/
 """
 from qgis.PyQt.QtCore import QLocale, QTranslator, QCoreApplication
-from qgis.core import QgsSettings
+from qgis.core import QgsSettings, QgsMapLayerProxyModel
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 
 # Import the code for the dialog
 from .q_landslide_dam_dialog import QLandslideDamDialog
 import os.path
+import numpy as np
 
 
 class QLandslideDam:
@@ -83,16 +84,16 @@ class QLandslideDam:
 
 
     def add_action(
-        self,
-        icon_path,
-        text,
-        callback,
-        enabled_flag=True,
-        add_to_menu=True,
-        add_to_toolbar=True,
-        status_tip=None,
-        whats_this=None,
-        parent=None):
+            self,
+            icon_path,
+            text,
+            callback,
+            enabled_flag=True,
+            add_to_menu=True,
+            add_to_toolbar=True,
+            status_tip=None,
+            whats_this=None,
+            parent=None):
         """Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
@@ -179,6 +180,108 @@ class QLandslideDam:
             self.iface.removeToolBarIcon(action)
 
 
+    def calculate_landslide_dam_wedge(self, dem_layer, center_point, direction_deg,
+                                      side_dip_deg, crest_slope_deg, target_volume_m3):
+        """
+        Replica la logica dello script GRASS GIS in PyQGIS + NumPy.
+        Calcola l'inviluppo di due piani inclinati e incrementa la quota base
+        finché il volume del cuneo sopra il DEM non raggiunge target_volume_m3.
+        """
+        provider = dem_layer.dataProvider()
+        extent = dem_layer.extent()
+        cols = dem_layer.width()
+        rows = dem_layer.height()
+
+        pixel_size_x = dem_layer.rasterUnitsPerPixelX()
+        pixel_size_y = dem_layer.rasterUnitsPerPixelY()
+        cell_area = pixel_size_x * pixel_size_y
+
+        # 1. Carica la matrice del DEM di input
+        block = provider.block(1, extent, cols, rows)
+        dem_array = np.zeros((rows, cols), dtype=np.float32)
+        nodata_val = provider.sourceNoDataValue(1)
+
+        for r in range(rows):
+            for c in range(cols):
+                val = block.value(r, c)
+                dem_array[r, c] = val if val != nodata_val else np.nan
+
+        mask_valid = ~np.isnan(dem_array)
+
+        # 2. Prepara la griglia di coordinate (X, Y)
+        x_coords = np.linspace(extent.xMinimum() + pixel_size_x / 2.0, extent.xMaximum() - pixel_size_x / 2.0, cols)
+        y_coords = np.linspace(extent.yMaximum() - pixel_size_y / 2.0, extent.yMinimum() + pixel_size_y / 2.0, rows)
+        X, Y = np.meshgrid(x_coords, y_coords)
+
+        # Coordinate del centro della diga
+        x0, y0 = center_point.x(), center_point.y()
+        dX = X - x0
+        dY = Y - y0
+
+        # Conversione angoli in radianti
+        azimuth_rad = np.radians(direction_deg)
+        # Tangente per l'inclinazione dei versanti (falde laterali)
+        tan_side_dip = np.tan(np.radians(side_dip_deg))
+
+        # Tangente per la pendenza longitudinale della cresta
+        tan_crest_slope = np.tan(np.radians(crest_slope_deg))
+
+
+        # Distanze parallela e perpendicolare rispetto all'asse della diga
+        d_parallel = dX * np.sin(azimuth_rad) + dY * np.cos(azimuth_rad)
+        d_perpendicular = dX * np.cos(azimuth_rad) - dY * np.sin(azimuth_rad)
+
+        # 3. Quota iniziale (quota del DEM nel punto centrale o minima nell'area)
+        # Convertiamo le coordinate del punto (X, Y) negli indici di Colonna e Riga della matrice DEM
+        col_c = int((x0 - extent.xMinimum()) / pixel_size_x)
+        row_c = int((extent.yMaximum() - y0) / pixel_size_y)
+
+        # Controllo che il punto cada all'interno della griglia del raster
+        if 0 <= col_c < cols and 0 <= row_c < rows:
+            start_elevation = dem_array[row_c, col_c]
+            if np.isnan(start_elevation):
+                start_elevation = np.nanmin(dem_array)
+        else:
+            # Se il punto è fuori dal raster, usa la quota minima del DEM
+            start_elevation = np.nanmin(dem_array)
+
+        current_elevation = start_elevation
+
+
+        step_z = 0.5  # Passo di incremento della quota ad ogni iterazione (metri)
+        calculated_volume = 0.0
+        max_iterations = 2000
+        iteration = 0
+
+        final_dam_dem = np.copy(dem_array)
+        thickness_array = np.zeros_like(dem_array)
+
+        # 4. Ciclo di accrescimento del cuneo per raggiungere il Volume Target
+        while calculated_volume < target_volume_m3 and iteration < max_iterations:
+            current_elevation += step_z
+
+            # --- PIANI INCLINATI CON DUE INCLINAZIONI DISTINTE ---
+            # 1. d_parallel usa la pendenza della cresta (tan_crest_slope)
+            # 2. d_perpendicular usa l'inclinazione dei versanti (tan_side_dip)
+            piano1 = current_elevation - (d_parallel * tan_crest_slope) + (d_perpendicular * tan_side_dip)
+            piano2 = current_elevation - (d_parallel * tan_crest_slope) - (d_perpendicular * tan_side_dip)
+
+            # Inviluppo inferiore (diedro)
+            dam1 = np.minimum(piano1, piano2)
+
+            # Spessore accumulato sopra il terreno naturale
+            thickness = np.where(mask_valid & (dam1 > dem_array), dam1 - dem_array, 0.0)
+            calculated_volume = np.sum(thickness) * cell_area
+
+            if calculated_volume >= target_volume_m3:
+                thickness_array = thickness
+                final_dam_dem = np.where(thickness > 0, dam1, dem_array)
+                break
+
+            iteration += 1
+
+        return final_dam_dem, thickness_array, calculated_volume
+
     def run(self):
         """Run method that performs all the real work"""
 
@@ -188,12 +291,52 @@ class QLandslideDam:
             self.first_start = False
             self.dlg = QLandslideDamDialog()
 
+            # --- CONFIGURAZIONE COMBOBOX RASTER ---
+            # Imposta il filtro per mostrare SOLO i layer Raster caricati in QGIS
+            self.dlg.DEM_raster_ComboBox.setFilters(QgsMapLayerProxyModel.RasterLayer)
+
         # show the dialog
         self.dlg.show()
         # Run the dialog event loop
         result = self.dlg.exec_()
         # See if OK was pressed
         if result:
-            # Do something useful here - delete the line containing pass and
-            # substitute with your code.
-            pass
+            # 1. Recupera il layer raster DEM selezionato
+            dem_layer = self.dlg.DEM_raster_ComboBox.currentLayer()
+            if not dem_layer:
+                self.iface.messageBar().pushWarning("Attenzione", "Seleziona un DEM valido.")
+                return
+
+            direction = self.dlg.DirectionBox.value()
+            # 1. Inclinazione trasversale dei versanti (es. angolo di attrito, tipicamente 30°-40°)
+            side_dip = self.dlg.InclinationBox.value()
+
+            # 2. Inclinazione longitudinale della cresta (es. pendenza del profilo, tipicamente 2°-10°)
+            crest_slope = self.dlg.CrestSlopeBox.value()
+
+            volume = self.dlg.VolumeBox.value()
+
+            # Centro temporaneo basato sulla Bounding Box del DEM
+            extent = dem_layer.extent()
+            center_point = QgsPointXY(
+                extent.xMinimum() + extent.width() / 2.0,
+                extent.yMinimum() + extent.height() / 2.0
+            )
+
+            # --- PUNTO CULMINALE FISSO PER TESTING ---
+            center_point = QgsPointXY(777549.0, 4780479.0)
+
+            # Esecuzione del calcolo
+            final_dem, thickness, vol_calc = self.calculate_landslide_dam_wedge(
+                dem_layer=dem_layer,
+                center_point=center_point,
+                direction_deg=direction,
+                side_dip_deg=side_dip,
+                crest_slope_deg=crest_slope,
+                target_volume_m3=volume
+            )
+
+            self.iface.messageBar().pushInfo(
+                "Q-LandslideDam",
+                f"Modellazione completata! Volume diga: {vol_calc:.1f} m³"
+            )
