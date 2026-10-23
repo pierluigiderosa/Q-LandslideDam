@@ -32,8 +32,9 @@ from qgis.core import (QgsSettings,
                        Qgis
                        )
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QFileDialog
 from qgis.gui import QgsMapToolEmitPoint
+from .settings_dialog import SettingsDialog  # <-- Import della nuova finestra
 
 import os
 import tempfile
@@ -81,6 +82,11 @@ class QLandslideDam:
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
         self.first_start = None
+
+        # Valori di default delle impostazioni avanzate
+        self.step_h = 0.2
+        self.max_iterations = 3000
+        self.max_radius_m = 400.0
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -194,6 +200,23 @@ class QLandslideDam:
                 action)
             self.iface.removeToolBarIcon(action)
 
+    def open_settings(self):
+        """Apre il dialogo delle impostazioni in modo totalmente indipendente dal dialogo principale."""
+        dlg_settings = SettingsDialog(
+            step_h=self.step_h,
+            max_iterations=self.max_iterations,
+            max_radius_m=self.max_radius_m
+        )
+        if dlg_settings.exec_():
+            # CORRETTO: Assegnazione di tutte e tre le variabili restituite
+            self.step_h, self.max_iterations, self.max_radius_m = dlg_settings.get_values()
+
+            # Aggiornato anche il messaggio informativo per mostrare il raggio
+            self.iface.messageBar().pushInfo(
+                "Q-LandslideDam",
+                f"Impostazioni aggiornate: Δh = {self.step_h} m | Max Iter = {self.max_iterations} | Raggio = {self.max_radius_m} m"
+            )
+
     def activate_point_tool(self):
         """Riduce a icona la finestra della GUI e attiva il cursore di selezione sulla mappa."""
         self.dlg.hide()  # Nasconde temporaneamente il dialogo per liberare la mappa
@@ -263,7 +286,8 @@ class QLandslideDam:
             return None
 
     def calculate_landslide_dam_wedge(self, dem_layer, center_point, direction_deg,
-                                      side_dip_deg, crest_slope_deg, target_volume_m3):
+                                      side_dip_deg, crest_slope_deg, target_volume_m3,
+                                      step_h=0.2, max_iterations=3000, max_radius_m=400.0):
 
         provider = dem_layer.dataProvider()
         extent = dem_layer.extent()
@@ -295,7 +319,10 @@ class QLandslideDam:
         dX = X - x0
         dY = Y - y0
 
-        # Conversione in radianti dell'Azimuth (0° Nord, 90° Est)
+        # Distanza euclidea dal punto cliccato (in metri)
+        distance_from_center = np.sqrt(dX ** 2 + dY ** 2)
+
+        # Conversione in radianti dell'Azimuth
         azimuth_rad = np.radians(direction_deg)
         tan_side_dip = np.tan(np.radians(side_dip_deg))
         tan_crest_slope = np.tan(np.radians(crest_slope_deg))
@@ -304,7 +331,6 @@ class QLandslideDam:
         d_parallel = dX * np.sin(azimuth_rad) + dY * np.cos(azimuth_rad)
         d_perpendicular = dX * np.cos(azimuth_rad) - dY * np.sin(azimuth_rad)
 
-        # Distanze assolute per garantire la simmetria a cuneo
         d_parallel_abs = np.abs(d_parallel)
         d_perpendicular_abs = np.abs(d_perpendicular)
 
@@ -319,27 +345,25 @@ class QLandslideDam:
         else:
             start_elevation = np.nanmin(dem_array)
 
-        # Parametri di accrescimento
         h = 0.0
-        step_h = 0.2  # incrementi di 20 cm
         calculated_volume = 0.0
-        max_iterations = 3000
         iteration = 0
 
         final_dam_dem = np.copy(dem_array)
         thickness_array = np.zeros_like(dem_array)
 
-        # 4. Ciclo di accrescimento progressivo
+        # 4. Ciclo di accrescimento progressivo confinato nel raggio locale
         while calculated_volume < target_volume_m3 and iteration < max_iterations:
             h += step_h
             current_crest_elevation = start_elevation + h
 
-            # Tetto del cuneo: scende dal colmo sia lungo la cresta che lungo i versanti
             dam_surface = current_crest_elevation - (d_parallel_abs * tan_crest_slope) - (
-                        d_perpendicular_abs * tan_side_dip)
+                    d_perpendicular_abs * tan_side_dip)
 
-            # Calcolo dello spessore dove il cuneo supera il terreno
-            thickness = np.where(mask_valid & (dam_surface > dem_array), dam_surface - dem_array, 0.0)
+            # Maschera vincolata al raggio impostato dall'utente nei settings
+            valid_wedge = mask_valid & (distance_from_center <= max_radius_m) & (dam_surface > dem_array)
+
+            thickness = np.where(valid_wedge, dam_surface - dem_array, 0.0)
             calculated_volume = np.sum(thickness) * cell_area
 
             thickness_array = thickness
@@ -350,6 +374,115 @@ class QLandslideDam:
         return final_dam_dem, thickness_array, calculated_volume, iteration
 
     def run(self):
+        """Run method that performs all the real work"""
+
+        if not hasattr(self, 'dlg') or self.dlg is None:
+            self.dlg = QLandslideDamDialog()
+
+            # Sblocco Range SpinBox coordinate
+            self.dlg.spin_x.setRange(-999999999.0, 999999999.0)
+            self.dlg.spin_y.setRange(-999999999.0, 999999999.0)
+
+            # Filtro ComboBox solo per layer Raster
+            self.dlg.DEM_raster_ComboBox.setFilters(QgsMapLayerProxyModel.RasterLayer)
+
+            # Collegamento pulsante per catturare le coordinate dalla mappa
+            self.dlg.btn_select_point.clicked.connect(self.activate_point_tool)
+            self.click_tool = QgsMapToolEmitPoint(self.iface.mapCanvas())
+            self.click_tool.canvasClicked.connect(self.on_point_captured)
+
+            # Collegamento pulsante impostazioni avanzate
+            self.dlg.btn_settings.clicked.connect(self.open_settings)
+
+        # --- FORZATURA FOCUS PER EVITARE IL DOPPIO CLICK ---
+        self.dlg.raise_()
+        self.dlg.activateWindow()
+
+        # Esegue il loop del dialogo
+        result = self.dlg.exec_()
+
+        if result:
+            # 1. Recupera il layer raster DEM selezionato
+            dem_layer = self.dlg.DEM_raster_ComboBox.currentLayer()
+            if not dem_layer:
+                self.iface.messageBar().pushWarning("Attenzione", "Seleziona un DEM valido.")
+                return
+
+            direction = self.dlg.DirectionBox.value()
+            side_dip = self.dlg.InclinationBox.value()
+            crest_slope = self.dlg.CrestSlopeBox.value()
+            volume = self.dlg.VolumeBox.value()
+
+            # --- RECUPERO COORDINATE DALLE SPINBOX DELLA GUI ---
+            x_coord = self.dlg.spin_x.value()
+            y_coord = self.dlg.spin_y.value()
+
+            # Controllo di sicurezza: verifica che le coordinate siano inserite
+            if x_coord == 0 and y_coord == 0:
+                self.iface.messageBar().pushWarning(
+                    "Attenzione",
+                    "Inserisci le coordinate X e Y oppure seleziona un punto sulla mappa."
+                )
+                return
+
+            center_point = QgsPointXY(x_coord, y_coord)
+
+            # Esecuzione del calcolo
+            final_dem, thickness, vol_calc, num_iter = self.calculate_landslide_dam_wedge(
+                dem_layer=dem_layer,
+                center_point=center_point,
+                direction_deg=direction,
+                side_dip_deg=side_dip,
+                crest_slope_deg=crest_slope,
+                target_volume_m3=volume,
+                step_h=self.step_h,
+                max_iterations=self.max_iterations,
+                max_radius_m=self.max_radius_m
+            )
+
+            # --- DEFINIZIONE PERCORSO PER WINDOWS ---
+            temp_dir = tempfile.gettempdir()
+            timestamp = int(time.time())
+            filename = f"landslide_dam_{timestamp}.tif"
+            # --- SCELTA PERCORSO DI SALVATAGGIO (TEMPORANEO O PERMANENTE) ---
+            if self.dlg.chk_save_permanent.isChecked():
+                # Apre la finestra di dialogo per scegliere dove salvare il file GeoTIFF
+                output_file, _ = QFileDialog.getSaveFileName(
+                    self.dlg,
+                    "Salva DEM Diga Permanente",
+                    "",
+                    "GeoTIFF Files (*.tif);;All Files (*)"
+                )
+
+                # Se l'utente preme "Annulla" nella finestra di salvataggio, interrompiamo l'esecuzione
+                if not output_file:
+                    return
+
+                # Assicura che il file termini con estensione .tif
+                if not output_file.lower().endswith('.tif'):
+                    output_file += '.tif'
+            else:
+                # Comportamento attuale: percorso temporaneo di sistema
+                temp_dir = tempfile.gettempdir()
+                timestamp = int(time.time())
+                filename = f"landslide_dam_{timestamp}.tif"
+                output_file = os.path.join(temp_dir, filename)
+
+            # Salva su disco e carica nella TOC di QGIS
+            loaded_layer = self.save_and_load_raster(
+                numpy_array=final_dem,
+                reference_layer=dem_layer,
+                output_path=output_file,
+                layer_name=f"DEM Diga ({vol_calc:.0f} m³)"
+            )
+
+            if loaded_layer:
+                self.iface.messageBar().pushInfo(
+                    "Q-LandslideDam",
+                    f"Iterazioni: {num_iter} | Volume richiesto: {volume} m³ | Volume ottenuto: {vol_calc:.1f} m³"
+                )
+
+    def runOLD(self): #Non usato più ma tenuto solo per memoria e backup
         """Run method that performs all the real work"""
 
         # Create the dialog with elements (after translation) and keep reference
@@ -372,6 +505,9 @@ class QLandslideDam:
             # Creo la mappa/strumento di cattura una sola volta
             self.click_tool = QgsMapToolEmitPoint(self.iface.mapCanvas())
             self.click_tool.canvasClicked.connect(self.on_point_captured)
+
+            # Collegamento del pulsante ingranaggio alla funzione open_settings
+            self.dlg.btn_settings.clicked.connect(self.open_settings)
 
         # show the dialog
         self.dlg.show()
@@ -419,7 +555,9 @@ class QLandslideDam:
                 direction_deg=direction,
                 side_dip_deg=side_dip,
                 crest_slope_deg=crest_slope,
-                target_volume_m3=volume
+                target_volume_m3=volume,
+                step_h=self.step_h,
+                max_iterations=self.max_iterations
             )
 
             # --- DEFINIZIONE PERCORSO PER WINDOWS ---
