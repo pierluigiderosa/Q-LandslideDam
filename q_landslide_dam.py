@@ -45,6 +45,7 @@ from osgeo import gdal, osr
 from .q_landslide_dam_dialog import QLandslideDamDialog
 import os.path
 import numpy as np
+import processing
 from osgeo import gdal, osr
 
 
@@ -505,5 +506,124 @@ class QLandslideDam:
                 Qgis.Info
             )
 
+            # =========================================================
+            # 2. CHIAMATA ALLA FUNZIONE LAGO (r.lake di GRASS)
+            # =========================================================
+            pixel_size_x = dem_layer.rasterUnitsPerPixelX()
+            pixel_size_y = dem_layer.rasterUnitsPerPixelY()
+
+            lake_layer, spillover_z, s_x, s_y = self.calculate_lake_basin(
+                dem_layer=dem_layer,
+                final_dem=final_dem,
+                thickness_array=thickness,  # Attento a passare la matrice 'thickness' calcolata nel wedge
+                center_point=center_point,
+                direction_deg=direction,
+                pixel_size_x=pixel_size_x,
+                pixel_size_y=pixel_size_y,
+                modified_dem_layer=loaded_layer  # Passiamo il layer caricato per GRASS
+            )
+
+            if lake_layer:
+                # Carica anche il raster del lago nella TOC di QGIS
+                QgsProject.instance().addMapLayer(lake_layer)
+                lake_layer.setName(f"Lago Invaso (Quota: {spillover_z:.1f} m)")
+
+                self.iface.messageBar().pushMessage(
+                    "Q-LandslideDam",
+                    f"Lago calcolato con successo! Quota di sbarramento: {spillover_z:.1f} m",
+                    Qgis.Info
+                )
+
         # Chiude la finestra al termine dell'operazione
         self.dlg.close()
+
+    def calculate_lake_basin(self, dem_layer, final_dem, thickness_array, center_point, direction_deg, pixel_size_x,
+                             pixel_size_y, modified_dem_layer):
+        """
+        MODALITA' DEBUG CON CAMPIONAMENTO CRESTA:
+        Campiona il DEM modificato lungo la cresta del cuneo per trovare la quota
+        di sbarramento corretta e calcola il seed point, stampandoli senza lanciare r.lake.
+        """
+        extent = dem_layer.extent()
+        cols = dem_layer.width()
+        rows = dem_layer.height()
+
+        # 1. LETTURA DEM ORIGINARIO PER IL GRADIENTE
+        provider = dem_layer.dataProvider()
+        block = provider.block(1, extent, cols, rows)
+        dem_array = np.zeros((rows, cols), dtype=np.float32)
+        nodata_val = provider.sourceNoDataValue(1)
+
+        for r in range(rows):
+            for c in range(cols):
+                val = block.value(r, c)
+                dem_array[r, c] = val if val != nodata_val else np.nan
+
+        # 2. CAMPIONAMENTO LUNGO LA CRESTA DEL CUNEO
+        x_coords = np.linspace(extent.xMinimum() + pixel_size_x / 2.0, extent.xMaximum() - pixel_size_x / 2.0, cols)
+        y_coords = np.linspace(extent.yMaximum() - pixel_size_y / 2.0, extent.yMinimum() + pixel_size_y / 2.0, rows)
+        X, Y = np.meshgrid(x_coords, y_coords)
+
+        x0, y0 = center_point.x(), center_point.y()
+        dX = X - x0
+        dY = Y - y0
+
+        azimuth_rad = np.radians(direction_deg)
+        d_parallel = dX * np.sin(azimuth_rad) + dY * np.cos(azimuth_rad)
+
+        # Maschera del cuneo attivo
+        valid_dam_mask = thickness_array > 0
+
+        # Filtriamo la zona centrale corrispondente alla cresta (ortogonale alla direzione della diga)
+        crest_tolerance = max(pixel_size_x, pixel_size_y) * 1.5
+        crest_mask = valid_dam_mask & (np.abs(d_parallel) <= crest_tolerance)
+
+        if np.any(crest_mask):
+            # Quota minima lungo la cresta centrale
+            crest_elevations = final_dem[crest_mask]
+            spillover_elevation = float(np.min(crest_elevations))
+        else:
+            spillover_elevation = float(np.min(final_dem[valid_dam_mask])) if np.any(valid_dam_mask) else float(
+                np.nanmin(final_dem))
+
+        # 3. CALCOLO AUTOMATICO DEL PUNTO DI SEME (A monte tramite gradiente)
+        grad_row, grad_col = np.gradient(dem_array, pixel_size_y, pixel_size_x)
+
+        col_c = int((x0 - extent.xMinimum()) / pixel_size_x)
+        row_c = int((extent.yMaximum() - y0) / pixel_size_y)
+
+        col_c = np.clip(col_c, 0, cols - 1)
+        row_c = np.clip(row_c, 0, rows - 1)
+
+        g_col = grad_col[row_c, col_c]
+        g_row = grad_row[row_c, col_c]
+
+        dz_dx = g_col
+        dz_dy = -g_row
+
+        grad_norm = np.sqrt(dz_dx ** 2 + dz_dy ** 2)
+        if grad_norm > 0:
+            dir_x = dz_dx / grad_norm
+            dir_y = dz_dy / grad_norm
+        else:
+            azimuth_rad_val = np.radians(direction_deg)
+            dir_x = np.sin(azimuth_rad_val)
+            dir_y = np.cos(azimuth_rad_val)
+
+        offset_m = 75.0
+        seed_x = x0 + (dir_x * offset_m)
+        seed_y = y0 + (dir_y * offset_m)
+
+        # --- MODALITA' DEBUG: STAMPA E STOP SENZA LANCIARE r.lake ---
+        debug_msg = f"CREST DEBUG -> Quota: {spillover_elevation:.2f} m | Seed: {seed_x:.2f}, {seed_y:.2f}"
+
+        self.iface.messageBar().pushMessage("Q-LandslideDam Crest", debug_msg, Qgis.Info)
+
+        print("--- Q-LANDSLIDE DAM CREST DEBUG ---")
+        print(f"Raster DEM Modificato: {modified_dem_layer.source()}")
+        print(f"Water Level (Quota di Cresta): {spillover_elevation}")
+        print(f"Coordinates (Seed): {seed_x},{seed_y}")
+        print("-----------------------------------")
+
+        # Restituiamo None per bloccare l'esecuzione automatica di r.lake
+        return None, spillover_elevation, seed_x, seed_y
