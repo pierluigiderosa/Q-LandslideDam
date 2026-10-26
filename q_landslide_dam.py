@@ -201,21 +201,29 @@ class QLandslideDam:
             self.iface.removeToolBarIcon(action)
 
     def open_settings(self):
-        """Apre il dialogo delle impostazioni in modo totalmente indipendente dal dialogo principale."""
+        """Apre il dialogo delle impostazioni e ripristina correttamente il focus sulla finestra principale."""
         dlg_settings = SettingsDialog(
             step_h=self.step_h,
             max_iterations=self.max_iterations,
             max_radius_m=self.max_radius_m
         )
         if dlg_settings.exec_():
-            # CORRETTO: Assegnazione di tutte e tre le variabili restituite
+            # Assegnazione dei valori aggiornati
             self.step_h, self.max_iterations, self.max_radius_m = dlg_settings.get_values()
 
-            # Aggiornato anche il messaggio informativo per mostrare il raggio
-            self.iface.messageBar().pushInfo(
+            # Messaggio di conferma nei settings
+            self.iface.messageBar().pushMessage(
                 "Q-LandslideDam",
-                f"Impostazioni aggiornate: Δh = {self.step_h} m | Max Iter = {self.max_iterations} | Raggio = {self.max_radius_m} m"
+                f"Impostazioni aggiornate: Δh = {self.step_h} m | Max Iter = {self.max_iterations} | Raggio = {self.max_radius_m} m",
+                Qgis.Info
             )
+
+        # --- FORZATURA DEL FOCUS SULLA FINESTRA PRINCIPALE ---
+        # Questo restituisce immediatamente l'attenzione a self.dlg evitando il doppio click
+        self.dlg.raise_()
+        self.dlg.activateWindow()
+        self.dlg.setFocus()
+
 
     def activate_point_tool(self):
         """Riduce a icona la finestra della GUI e attiva il cursore di selezione sulla mappa."""
@@ -282,7 +290,11 @@ class QLandslideDam:
             QgsProject.instance().addMapLayer(new_layer)
             return new_layer
         else:
-            self.iface.messageBar().pushCritical("Errore", "Impossibile caricare il raster generato.")
+            self.iface.messageBar().pushMessage(
+                "Errore",
+                "Impossibile caricare il raster generato.",
+                Qgis.Critical
+            )
             return None
 
     def calculate_landslide_dam_wedge(self, dem_layer, center_point, direction_deg,
@@ -394,40 +406,50 @@ class QLandslideDam:
             # Collegamento pulsante impostazioni avanzate
             self.dlg.btn_settings.clicked.connect(self.open_settings)
 
-        # --- FORZATURA FOCUS PER EVITARE IL DOPPIO CLICK ---
+            # Ricolleghiamo i pulsanti OK/Cancel della button_box in modo esplicito
+            self.dlg.button_box.accepted.connect(self.on_dialog_accepted)
+            self.dlg.button_box.rejected.connect(self.dlg.close)
+
+        # Mostra la finestra portandola in primo piano al primo colpo
+        self.dlg.show()
         self.dlg.raise_()
         self.dlg.activateWindow()
 
-        # Esegue il loop del dialogo
-        result = self.dlg.exec_()
+    def on_dialog_accepted(self):
+        """Metodo eseguito quando l'utente preme OK sulla finestra principale."""
 
-        if result:
-            # 1. Recupera il layer raster DEM selezionato
-            dem_layer = self.dlg.DEM_raster_ComboBox.currentLayer()
-            if not dem_layer:
-                self.iface.messageBar().pushWarning("Attenzione", "Seleziona un DEM valido.")
-                return
+        # 1. Recupera il layer raster DEM selezionato
+        dem_layer = self.dlg.DEM_raster_ComboBox.currentLayer()
+        if not dem_layer:
+            self.iface.messageBar().pushMessage(
+                "Attenzione",
+                "Seleziona un DEM valido.",
+                Qgis.Warning
+            )
+            return
 
-            direction = self.dlg.DirectionBox.value()
-            side_dip = self.dlg.InclinationBox.value()
-            crest_slope = self.dlg.CrestSlopeBox.value()
-            volume = self.dlg.VolumeBox.value()
+        direction = self.dlg.DirectionBox.value()
+        side_dip = self.dlg.InclinationBox.value()
+        crest_slope = self.dlg.CrestSlopeBox.value()
+        volume = self.dlg.VolumeBox.value()
 
-            # --- RECUPERO COORDINATE DALLE SPINBOX DELLA GUI ---
-            x_coord = self.dlg.spin_x.value()
-            y_coord = self.dlg.spin_y.value()
+        # --- RECUPERO COORDINATE DALLE SPINBOX DELLA GUI ---
+        x_coord = self.dlg.spin_x.value()
+        y_coord = self.dlg.spin_y.value()
 
-            # Controllo di sicurezza: verifica che le coordinate siano inserite
-            if x_coord == 0 and y_coord == 0:
-                self.iface.messageBar().pushWarning(
-                    "Attenzione",
-                    "Inserisci le coordinate X e Y oppure seleziona un punto sulla mappa."
-                )
-                return
+        # Controllo di sicurezza: verifica che le coordinate siano inserite
+        if x_coord == 0 and y_coord == 0:
+            self.iface.messageBar().pushMessage(
+                "Attenzione",
+                "Inserisci le coordinate X e Y oppure seleziona un punto sulla mappa.",
+                Qgis.Warning
+            )
+            return
 
-            center_point = QgsPointXY(x_coord, y_coord)
+        center_point = QgsPointXY(x_coord, y_coord)
 
-            # Esecuzione del calcolo
+        # Esecuzione del calcolo
+        try:
             final_dem, thickness, vol_calc, num_iter = self.calculate_landslide_dam_wedge(
                 dem_layer=dem_layer,
                 center_point=center_point,
@@ -439,145 +461,49 @@ class QLandslideDam:
                 max_iterations=self.max_iterations,
                 max_radius_m=self.max_radius_m
             )
+        except Exception as e:
+            self.iface.messageBar().pushMessage(
+                "Errore di calcolo",
+                f"Errore durante l'elaborazione del cuneo: {str(e)}",
+                Qgis.Critical
+            )
+            return
 
-            # --- DEFINIZIONE PERCORSO PER WINDOWS ---
-            temp_dir = tempfile.gettempdir()
-            timestamp = int(time.time())
-            filename = f"landslide_dam_{timestamp}.tif"
-            # --- SCELTA PERCORSO DI SALVATAGGIO (TEMPORANEO O PERMANENTE) ---
-            if self.dlg.chk_save_permanent.isChecked():
-                # Apre la finestra di dialogo per scegliere dove salvare il file GeoTIFF
-                output_file, _ = QFileDialog.getSaveFileName(
-                    self.dlg,
-                    "Salva DEM Diga Permanente",
-                    "",
-                    "GeoTIFF Files (*.tif);;All Files (*)"
-                )
-
-                # Se l'utente preme "Annulla" nella finestra di salvataggio, interrompiamo l'esecuzione
-                if not output_file:
-                    return
-
-                # Assicura che il file termini con estensione .tif
-                if not output_file.lower().endswith('.tif'):
-                    output_file += '.tif'
-            else:
-                # Comportamento attuale: percorso temporaneo di sistema
-                temp_dir = tempfile.gettempdir()
-                timestamp = int(time.time())
-                filename = f"landslide_dam_{timestamp}.tif"
-                output_file = os.path.join(temp_dir, filename)
-
-            # Salva su disco e carica nella TOC di QGIS
-            loaded_layer = self.save_and_load_raster(
-                numpy_array=final_dem,
-                reference_layer=dem_layer,
-                output_path=output_file,
-                layer_name=f"DEM Diga ({vol_calc:.0f} m³)"
+        # --- SCELTA PERCORSO DI SALVATAGGIO (TEMPORANEO O PERMANENTE) ---
+        if self.dlg.chk_save_permanent.isChecked():
+            output_file, _ = QFileDialog.getSaveFileName(
+                self.dlg,
+                "Salva DEM Diga Permanente",
+                "",
+                "GeoTIFF Files (*.tif);;All Files (*)"
             )
 
-            if loaded_layer:
-                self.iface.messageBar().pushInfo(
-                    "Q-LandslideDam",
-                    f"Iterazioni: {num_iter} | Volume richiesto: {volume} m³ | Volume ottenuto: {vol_calc:.1f} m³"
-                )
-
-    def runOLD(self): #Non usato più ma tenuto solo per memoria e backup
-        """Run method that performs all the real work"""
-
-        # Create the dialog with elements (after translation) and keep reference
-        # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-        if self.first_start == True:
-            self.first_start = False
-            self.dlg = QLandslideDamDialog()
-
-            # --- SBLOCCO PARTE INTERA E DECIMALI PER COORDINATE ---
-            self.dlg.spin_x.setRange(-999999999.0, 999999999.0)
-            self.dlg.spin_y.setRange(-999999999.0, 999999999.0)
-
-            # --- CONFIGURAZIONE COMBOBOX RASTER ---
-            # Filtro ComboBox solo per layer Raster
-            self.dlg.DEM_raster_ComboBox.setFilters(QgsMapLayerProxyModel.RasterLayer)
-
-            # Collegamento del pulsante per catturare le coordinate dalla mappa
-            self.dlg.btn_select_point.clicked.connect(self.activate_point_tool)
-
-            # Creo la mappa/strumento di cattura una sola volta
-            self.click_tool = QgsMapToolEmitPoint(self.iface.mapCanvas())
-            self.click_tool.canvasClicked.connect(self.on_point_captured)
-
-            # Collegamento del pulsante ingranaggio alla funzione open_settings
-            self.dlg.btn_settings.clicked.connect(self.open_settings)
-
-        # show the dialog
-        self.dlg.show()
-        # Run the dialog event loop
-        result = self.dlg.exec_()
-        # See if OK was pressed
-        if result:
-            # 1. Recupera il layer raster DEM selezionato
-            dem_layer = self.dlg.DEM_raster_ComboBox.currentLayer()
-            if not dem_layer:
-                self.iface.messageBar().pushWarning("Attenzione", "Seleziona un DEM valido.")
+            if not output_file:
                 return
 
-            direction = self.dlg.DirectionBox.value()
-            # 1. Inclinazione trasversale dei versanti (es. angolo di attrito, tipicamente 30°-40°)
-            side_dip = self.dlg.InclinationBox.value()
-
-            # 2. Inclinazione longitudinale della cresta (es. pendenza del profilo, tipicamente 2°-10°)
-            crest_slope = self.dlg.CrestSlopeBox.value()
-
-            volume = self.dlg.VolumeBox.value()
-
-            # --- RECUPERO COORDINATE DALLE SPINBOX DELLA GUI ---
-            x_coord = self.dlg.spin_x.value()
-            y_coord = self.dlg.spin_y.value()
-
-            # Controllo di sicurezza: verifica che le coordinate siano inserite
-            if x_coord == 0 and y_coord == 0:
-                self.iface.messageBar().pushWarning(
-                    "Attenzione",
-                    "Inserisci le coordinate X e Y oppure seleziona un punto sulla mappa."
-                )
-                return
-
-            center_point = QgsPointXY(x_coord, y_coord)
-
-            # --- PUNTO CULMINALE FISSO PER TESTING ---
-            #center_point = QgsPointXY(777549.0, 4780479.0)
-
-
-            # Esecuzione del calcolo
-            final_dem, thickness, vol_calc, num_iter = self.calculate_landslide_dam_wedge(
-                dem_layer=dem_layer,
-                center_point=center_point,
-                direction_deg=direction,
-                side_dip_deg=side_dip,
-                crest_slope_deg=crest_slope,
-                target_volume_m3=volume,
-                step_h=self.step_h,
-                max_iterations=self.max_iterations
-            )
-
-            # --- DEFINIZIONE PERCORSO PER WINDOWS ---
-            # Usiamo la cartella Temp di sistema (es. C:\Users\Nome\AppData\Local\Temp)
-            # e aggiungiamo un timestamp al nome del file per evitare sovrascritture bloccate da QGIS
+            if not output_file.lower().endswith('.tif'):
+                output_file += '.tif'
+        else:
             temp_dir = tempfile.gettempdir()
             timestamp = int(time.time())
             filename = f"landslide_dam_{timestamp}.tif"
             output_file = os.path.join(temp_dir, filename)
 
-            # Salva su disco e carica nella TOC
-            loaded_layer = self.save_and_load_raster(
-                numpy_array=final_dem,
-                reference_layer=dem_layer,
-                output_path=output_file,
-                layer_name=f"DEM Diga ({vol_calc:.0f} m³)"
+            # Salva su disco e carica nella TOC di QGIS
+        loaded_layer = self.save_and_load_raster(
+            numpy_array=final_dem,
+            reference_layer=dem_layer,
+            output_path=output_file,
+            layer_name=f"DEM Diga ({vol_calc:.0f} m³)"
+        )
+
+        # Messaggio di successo
+        if loaded_layer:
+            self.iface.messageBar().pushMessage(
+                "Q-LandslideDam",
+                f"Iterazioni: {num_iter} | Volume richiesto: {volume} m³ | Volume ottenuto: {vol_calc:.1f} m³",
+                Qgis.Info
             )
 
-            if loaded_layer:
-                self.iface.messageBar().pushInfo(
-                    "Q-LandslideDam",
-                    f"Iterazioni: {num_iter} | Volume richiesto: {volume} m³ | Volume ottenuto: {vol_calc:.1f} m³"
-                )
+        # Chiude la finestra al termine dell'operazione
+        self.dlg.close()
