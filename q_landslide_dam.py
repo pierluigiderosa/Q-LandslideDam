@@ -25,6 +25,7 @@ from qgis.PyQt.QtCore import QLocale, QTranslator, QCoreApplication, QVariant
 from qgis.core import (QgsSettings,
                        QgsMapLayerProxyModel,
                        QgsRasterLayer,
+                       QgsHillshadeRenderer,
                        QgsVectorLayer,
                        QgsField,
                        QgsFeature,
@@ -304,7 +305,7 @@ class QLandslideDam:
         return d_parallel, d_perpendicular, distance
 
     def save_and_load_raster(self, numpy_array, reference_layer, output_path, layer_name="DEM Modified",
-                             nodata_value=None):
+                             nodata_value=None, hillshade=False):
         """
         Salva la matrice NumPy come file GeoTIFF mantenendo il CRS, le dimensioni
         e il geotransform del DEM di riferimento, poi lo carica nella TOC di QGIS.
@@ -349,6 +350,11 @@ class QLandslideDam:
         # Caricamento nella TOC
         new_layer = QgsRasterLayer(output_path, layer_name)
         if new_layer.isValid():
+            if hillshade:
+                # Visualizzazione a rilievo ombreggiato: sole da NW (azimut 315°) a 45° di altezza
+                renderer = QgsHillshadeRenderer(new_layer.dataProvider(), 1, 315.0, 45.0)
+                renderer.setZFactor(1.0)
+                new_layer.setRenderer(renderer)
             QgsProject.instance().addMapLayer(new_layer)
             return new_layer
         else:
@@ -563,7 +569,8 @@ class QLandslideDam:
             numpy_array=final_dem,
             reference_layer=dem_layer,
             output_path=output_file,
-            layer_name=f"DEM Diga ({vol_calc:.0f} m³)"
+            layer_name=f"DEM Diga ({vol_calc:.0f} m³)",
+            hillshade=True
         )
 
         # Messaggio di successo
