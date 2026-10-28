@@ -21,14 +21,20 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QLocale, QTranslator, QCoreApplication
+from qgis.PyQt.QtCore import QLocale, QTranslator, QCoreApplication, QVariant
 from qgis.core import (QgsSettings,
                        QgsMapLayerProxyModel,
                        QgsRasterLayer,
+                       QgsVectorLayer,
+                       QgsField,
+                       QgsFeature,
+                       QgsGeometry,
                        QgsProject,
+                       QgsApplication,
                        QgsRasterBlock,
                        QgsPointXY,
                        QgsMessageLog,
+                       QgsUnitTypes,
                        Qgis
                        )
 from qgis.PyQt.QtGui import QIcon
@@ -43,10 +49,14 @@ from osgeo import gdal, osr
 
 # Import the code for the dialog
 from .q_landslide_dam_dialog import QLandslideDamDialog
+from . import lake_utils
 import os.path
 import numpy as np
 import processing
 from osgeo import gdal, osr
+
+# Codici con cui compare il Pseudo-Mercator (Web Mercator), non ammesso per i calcoli
+PSEUDO_MERCATOR_AUTHIDS = {'EPSG:3857', 'EPSG:900913', 'EPSG:3785', 'ESRI:102100', 'ESRI:102113'}
 
 
 class QLandslideDam:
@@ -243,7 +253,58 @@ class QLandslideDam:
         # Mostra nuovamente il dialogo del plugin
         self.dlg.show()
 
-    def save_and_load_raster(self, numpy_array, reference_layer, output_path, layer_name="DEM Modified"):
+    def _read_dem_array(self, layer):
+        """Legge la banda 1 del raster come matrice float32, con i NoData convertiti in NaN."""
+        ds = gdal.Open(layer.source())
+        if ds is not None:
+            band = ds.GetRasterBand(1)
+            dem_array = band.ReadAsArray().astype(np.float32)
+            nodata_val = band.GetNoDataValue()
+            ds = None
+            if nodata_val is not None:
+                dem_array[dem_array == nodata_val] = np.nan
+            return dem_array
+
+        # Fallback per sorgenti non leggibili direttamente da GDAL
+        provider = layer.dataProvider()
+        cols = layer.width()
+        rows = layer.height()
+        block = provider.block(1, layer.extent(), cols, rows)
+        nodata_val = provider.sourceNoDataValue(1)
+        dem_array = np.zeros((rows, cols), dtype=np.float32)
+        for r in range(rows):
+            for c in range(cols):
+                val = block.value(r, c)
+                dem_array[r, c] = val if val != nodata_val else np.nan
+        return dem_array
+
+    def _rotated_distances(self, layer, center_point, direction_deg):
+        """
+        Distanze di ogni cella dal punto centrale: lungo l'asse dello sbarramento
+        (d_parallel), in direzione monte-valle (d_perpendicular) ed euclidea.
+        """
+        extent = layer.extent()
+        cols = layer.width()
+        rows = layer.height()
+        pixel_size_x = layer.rasterUnitsPerPixelX()
+        pixel_size_y = layer.rasterUnitsPerPixelY()
+
+        x_coords = np.linspace(extent.xMinimum() + pixel_size_x / 2.0, extent.xMaximum() - pixel_size_x / 2.0, cols)
+        y_coords = np.linspace(extent.yMaximum() - pixel_size_y / 2.0, extent.yMinimum() + pixel_size_y / 2.0, rows)
+        X, Y = np.meshgrid(x_coords, y_coords)
+
+        dX = X - center_point.x()
+        dY = Y - center_point.y()
+
+        azimuth_rad = np.radians(direction_deg)
+        d_parallel = dX * np.sin(azimuth_rad) + dY * np.cos(azimuth_rad)
+        d_perpendicular = dX * np.cos(azimuth_rad) - dY * np.sin(azimuth_rad)
+        distance = np.sqrt(dX ** 2 + dY ** 2)
+
+        return d_parallel, d_perpendicular, distance
+
+    def save_and_load_raster(self, numpy_array, reference_layer, output_path, layer_name="DEM Modified",
+                             nodata_value=None):
         """
         Salva la matrice NumPy come file GeoTIFF mantenendo il CRS, le dimensioni
         e il geotransform del DEM di riferimento, poi lo carica nella TOC di QGIS.
@@ -275,7 +336,7 @@ class QLandslideDam:
         out_ds.SetProjection(srs.ExportToWkt())
 
         band = out_ds.GetRasterBand(1)
-        nodata_val = provider.sourceNoDataValue(1)
+        nodata_val = nodata_value if nodata_value is not None else provider.sourceNoDataValue(1)
 
         if nodata_val is not None:
             band.SetNoDataValue(nodata_val)
@@ -302,7 +363,6 @@ class QLandslideDam:
                                       side_dip_deg, crest_slope_deg, target_volume_m3,
                                       step_h=0.2, max_iterations=3000, max_radius_m=400.0):
 
-        provider = dem_layer.dataProvider()
         extent = dem_layer.extent()
         cols = dem_layer.width()
         rows = dem_layer.height()
@@ -312,37 +372,16 @@ class QLandslideDam:
         cell_area = pixel_size_x * pixel_size_y
 
         # 1. Carica la matrice del DEM di input
-        block = provider.block(1, extent, cols, rows)
-        dem_array = np.zeros((rows, cols), dtype=np.float32)
-        nodata_val = provider.sourceNoDataValue(1)
-
-        for r in range(rows):
-            for c in range(cols):
-                val = block.value(r, c)
-                dem_array[r, c] = val if val != nodata_val else np.nan
-
+        dem_array = self._read_dem_array(dem_layer)
         mask_valid = ~np.isnan(dem_array)
 
-        # 2. Prepara la griglia di coordinate (X, Y)
-        x_coords = np.linspace(extent.xMinimum() + pixel_size_x / 2.0, extent.xMaximum() - pixel_size_x / 2.0, cols)
-        y_coords = np.linspace(extent.yMaximum() - pixel_size_y / 2.0, extent.yMinimum() + pixel_size_y / 2.0, rows)
-        X, Y = np.meshgrid(x_coords, y_coords)
-
+        # 2. Distanze ruotate rispetto alla direzione della diga e distanza dal punto cliccato
+        d_parallel, d_perpendicular, distance_from_center = self._rotated_distances(
+            dem_layer, center_point, direction_deg)
         x0, y0 = center_point.x(), center_point.y()
-        dX = X - x0
-        dY = Y - y0
 
-        # Distanza euclidea dal punto cliccato (in metri)
-        distance_from_center = np.sqrt(dX ** 2 + dY ** 2)
-
-        # Conversione in radianti dell'Azimuth
-        azimuth_rad = np.radians(direction_deg)
         tan_side_dip = np.tan(np.radians(side_dip_deg))
         tan_crest_slope = np.tan(np.radians(crest_slope_deg))
-
-        # Distanze ruotate rispetto alla direzione della diga
-        d_parallel = dX * np.sin(azimuth_rad) + dY * np.cos(azimuth_rad)
-        d_perpendicular = dX * np.cos(azimuth_rad) - dY * np.sin(azimuth_rad)
 
         d_parallel_abs = np.abs(d_parallel)
         d_perpendicular_abs = np.abs(d_perpendicular)
@@ -384,7 +423,7 @@ class QLandslideDam:
 
             iteration += 1
 
-        return final_dam_dem, thickness_array, calculated_volume, iteration
+        return final_dam_dem, thickness_array, calculated_volume, iteration, dem_array
 
     def run(self):
         """Run method that performs all the real work"""
@@ -429,6 +468,35 @@ class QLandslideDam:
             )
             return
 
+        # Il DEM deve essere in un sistema proiettato metrico: con coordinate geografiche
+        # (lat/lon) o unità diverse dal metro distanze, pendenze e volumi sarebbero errati
+        crs = dem_layer.crs()
+        if not crs.isValid() or crs.isGeographic() or crs.mapUnits() != QgsUnitTypes.DistanceMeters:
+            crs_name = crs.authid() or crs.description() or "non definito"
+            self.iface.messageBar().pushMessage(
+                "Attenzione",
+                f"Il DEM '{dem_layer.name()}' è nel sistema di riferimento {crs_name}, che non è proiettato in metri. "
+                "Il plugin lavora solo con raster in un sistema proiettato metrico (es. UTM): "
+                "riproietta il DEM (Raster > Proiezioni > Riproietta) e riprova.",
+                Qgis.Warning
+            )
+            return
+
+        # Pseudo-Mercator (Web Mercator) è in metri ma deforma le distanze di 1/cos(lat):
+        # aree e volumi risulterebbero sovrastimati, quindi non è ammesso
+        proj = crs.toProj().replace(' ', '')
+        is_pseudo_mercator = (crs.authid().upper() in PSEUDO_MERCATOR_AUTHIDS
+                              or ('+proj=merc' in proj and '+a=6378137' in proj and '+b=6378137' in proj))
+        if is_pseudo_mercator:
+            self.iface.messageBar().pushMessage(
+                "Attenzione",
+                f"Il DEM '{dem_layer.name()}' è in Pseudo-Mercator ({crs.authid() or crs.description()}), "
+                "che deforma distanze e aree (alle latitudini italiane i volumi risultano circa doppi). "
+                "Riproietta il DEM in un sistema proiettato metrico locale (es. UTM) e riprova.",
+                Qgis.Warning
+            )
+            return
+
         direction = self.dlg.DirectionBox.value()
         side_dip = self.dlg.InclinationBox.value()
         crest_slope = self.dlg.CrestSlopeBox.value()
@@ -451,7 +519,7 @@ class QLandslideDam:
 
         # Esecuzione del calcolo
         try:
-            final_dem, thickness, vol_calc, num_iter = self.calculate_landslide_dam_wedge(
+            final_dem, thickness, vol_calc, num_iter, dem_array = self.calculate_landslide_dam_wedge(
                 dem_layer=dem_layer,
                 center_point=center_point,
                 direction_deg=direction,
@@ -507,123 +575,225 @@ class QLandslideDam:
             )
 
             # =========================================================
-            # 2. CHIAMATA ALLA FUNZIONE LAGO (r.lake di GRASS)
+            # 2. LAGO DI SBARRAMENTO A MONTE (r.lake di GRASS)
             # =========================================================
-            pixel_size_x = dem_layer.rasterUnitsPerPixelX()
-            pixel_size_y = dem_layer.rasterUnitsPerPixelY()
-
-            lake_layer, spillover_z, s_x, s_y = self.calculate_lake_basin(
-                dem_layer=dem_layer,
-                final_dem=final_dem,
-                thickness_array=thickness,  # Attento a passare la matrice 'thickness' calcolata nel wedge
-                center_point=center_point,
-                direction_deg=direction,
-                pixel_size_x=pixel_size_x,
-                pixel_size_y=pixel_size_y,
-                modified_dem_layer=loaded_layer  # Passiamo il layer caricato per GRASS
-            )
-
-            if lake_layer:
-                # Carica anche il raster del lago nella TOC di QGIS
-                QgsProject.instance().addMapLayer(lake_layer)
-                lake_layer.setName(f"Lago Invaso (Quota: {spillover_z:.1f} m)")
-
-                self.iface.messageBar().pushMessage(
-                    "Q-LandslideDam",
-                    f"Lago calcolato con successo! Quota di sbarramento: {spillover_z:.1f} m",
-                    Qgis.Info
+            lake_output = os.path.splitext(output_file)[0] + "_lake.tif"
+            try:
+                lake = self.calculate_lake_basin(
+                    dem_layer=dem_layer,
+                    dem_array=dem_array,
+                    final_dem=final_dem,
+                    thickness_array=thickness,
+                    modified_dem_layer=loaded_layer,
+                    output_path=lake_output
                 )
+            except Exception as e:
+                self.iface.messageBar().pushMessage(
+                    "Errore lago",
+                    f"Calcolo del lago di sbarramento non riuscito: {str(e)}",
+                    Qgis.Warning
+                )
+                lake = None
+
+            if lake is not None:
+                seed_x, seed_y = lake['seed']
+                if lake['status'] == 'not_effective':
+                    self.iface.messageBar().pushMessage(
+                        "Q-LandslideDam",
+                        f"Lo sbarramento non chiude la valle: dal seed ({seed_x:.1f}, {seed_y:.1f}, "
+                        f"quota {lake['seed_z']:.2f} m) l'acqua esce verso {lake['exit_description']} "
+                        f"senza invaso. Controlla il layer 'Lago - punti di controllo'.",
+                        Qgis.Warning
+                    )
+                else:
+                    lake_msg = (f"Lago: quota {lake['level']:.2f} m | volume {lake['volume']:.0f} m³ | "
+                                f"area {lake['area'] / 10000.0:.2f} ha | prof. max {lake['max_depth']:.1f} m | "
+                                f"seed {seed_x:.1f}, {seed_y:.1f}")
+                    if lake['status'] == 'border':
+                        self.iface.messageBar().pushMessage(
+                            "Q-LandslideDam",
+                            lake_msg + " | ATTENZIONE: il lago raggiunge il bordo del DEM e può essere troncato, "
+                                       "usa un DEM più esteso.",
+                            Qgis.Warning
+                        )
+                    else:
+                        self.iface.messageBar().pushMessage("Q-LandslideDam", lake_msg, Qgis.Info)
 
         # Chiude la finestra al termine dell'operazione
         self.dlg.close()
 
-    def calculate_lake_basin(self, dem_layer, final_dem, thickness_array, center_point, direction_deg, pixel_size_x,
-                             pixel_size_y, modified_dem_layer):
+    def _rlake_algorithm_id(self):
+        """Id di r.lake nel Processing: 'grass:' da QGIS 3.36, 'grass7:' nelle versioni precedenti."""
+        registry = QgsApplication.processingRegistry()
+        for alg_id in ('grass:r.lake', 'grass7:r.lake'):
+            if registry.algorithmById(alg_id) is not None:
+                return alg_id
+        return None
+
+    def _add_control_points_layer(self, points, crs):
         """
-        MODALITA' DEBUG CON CAMPIONAMENTO CRESTA:
-        Campiona il DEM modificato lungo la cresta del cuneo per trovare la quota
-        di sbarramento corretta e calcola il seed point, stampandoli senza lanciare r.lake.
+        Aggiunge alla TOC un layer temporaneo con i punti di controllo del lago
+        (seed, punto di valle, punto di tracimazione) e i relativi attributi.
+        """
+        layer = QgsVectorLayer("Point", "Lago - punti di controllo", "memory")
+        layer.setCrs(crs)
+        provider = layer.dataProvider()
+        provider.addAttributes([
+            QgsField("ruolo", QVariant.String),
+            QgsField("x", QVariant.Double),
+            QgsField("y", QVariant.Double),
+            QgsField("quota_dem", QVariant.Double),
+            QgsField("quota_sfioro", QVariant.Double),
+            QgsField("stato", QVariant.String),
+            QgsField("nota", QVariant.String),
+        ])
+        layer.updateFields()
+
+        features = []
+        for point in points:
+            feature = QgsFeature(layer.fields())
+            feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(point['x'], point['y'])))
+            feature.setAttributes([point['ruolo'], point['x'], point['y'], point['quota_dem'],
+                                   point['quota_sfioro'], point['stato'], point['nota']])
+            features.append(feature)
+        provider.addFeatures(features)
+        layer.updateExtents()
+        QgsProject.instance().addMapLayer(layer)
+        return layer
+
+    def _raster_volume(self, raster_path, cell_area):
+        """Volume (m³) di un raster delle profondità: somma delle celle positive per l'area della cella."""
+        ds = gdal.Open(raster_path)
+        band = ds.GetRasterBand(1)
+        depth = band.ReadAsArray().astype(np.float64)
+        nodata_val = band.GetNoDataValue()
+        ds = None
+        valid = np.isfinite(depth) & (depth > 0)
+        if nodata_val is not None:
+            valid &= depth != nodata_val
+        return float(np.sum(depth[valid])) * cell_area
+
+    def calculate_lake_basin(self, dem_layer, dem_array, final_dem, thickness_array,
+                             modified_dem_layer, output_path):
+        """
+        Calcola il lago di sbarramento a monte del cuneo senza input dell'utente:
+        1. seed point e punto di valle dove l'alveo attraversa l'anello attorno al cuneo;
+        2. quota di sfioro per bisezione (quota massima senza tracimazione verso valle);
+        3. raster delle profondità con r.lake (o in numpy se GRASS non è disponibile);
+        4. volume, area e profondità massima del lago.
+        I punti di controllo vengono sempre caricati nella TOC, anche se il lago non si forma.
         """
         extent = dem_layer.extent()
-        cols = dem_layer.width()
-        rows = dem_layer.height()
+        pixel_size_x = dem_layer.rasterUnitsPerPixelX()
+        pixel_size_y = dem_layer.rasterUnitsPerPixelY()
+        cell_area = pixel_size_x * pixel_size_y
 
-        # 1. LETTURA DEM ORIGINARIO PER IL GRADIENTE
-        provider = dem_layer.dataProvider()
-        block = provider.block(1, extent, cols, rows)
-        dem_array = np.zeros((rows, cols), dtype=np.float32)
-        nodata_val = provider.sourceNoDataValue(1)
+        def cell_center(rc):
+            return (extent.xMinimum() + (rc[1] + 0.5) * pixel_size_x,
+                    extent.yMaximum() - (rc[0] + 0.5) * pixel_size_y)
 
-        for r in range(rows):
-            for c in range(cols):
-                val = block.value(r, c)
-                dem_array[r, c] = val if val != nodata_val else np.nan
+        # 1. Seed point a monte e punto di riferimento a valle
+        seed_rc, outlet_rc, persistence = lake_utils.find_seed_and_outlet(dem_array, thickness_array)
+        seed_x, seed_y = cell_center(seed_rc)
+        outlet_x, outlet_y = cell_center(outlet_rc)
 
-        # 2. CAMPIONAMENTO LUNGO LA CRESTA DEL CUNEO
-        x_coords = np.linspace(extent.xMinimum() + pixel_size_x / 2.0, extent.xMaximum() - pixel_size_x / 2.0, cols)
-        y_coords = np.linspace(extent.yMaximum() - pixel_size_y / 2.0, extent.yMinimum() + pixel_size_y / 2.0, rows)
-        X, Y = np.meshgrid(x_coords, y_coords)
+        # 2. Quota di sfioro
+        max_level = float(np.nanmax(final_dem[thickness_array > 0]))
+        spill = lake_utils.compute_spill_level(final_dem, seed_rc, outlet_rc, max_level)
+        level = spill['level']
+        status = spill['status']
+        exit_rc = spill['exit_rc']
 
-        x0, y0 = center_point.x(), center_point.y()
-        dX = X - x0
-        dY = Y - y0
-
-        azimuth_rad = np.radians(direction_deg)
-        d_parallel = dX * np.sin(azimuth_rad) + dY * np.cos(azimuth_rad)
-
-        # Maschera del cuneo attivo
-        valid_dam_mask = thickness_array > 0
-
-        # Filtriamo la zona centrale corrispondente alla cresta (ortogonale alla direzione della diga)
-        crest_tolerance = max(pixel_size_x, pixel_size_y) * 1.5
-        crest_mask = valid_dam_mask & (np.abs(d_parallel) <= crest_tolerance)
-
-        if np.any(crest_mask):
-            # Quota minima lungo la cresta centrale
-            crest_elevations = final_dem[crest_mask]
-            spillover_elevation = float(np.min(crest_elevations))
+        if exit_rc is None:
+            exit_description = "nessuna uscita"
+        elif tuple(exit_rc) == tuple(outlet_rc):
+            exit_description = "il punto di valle"
         else:
-            spillover_elevation = float(np.min(final_dem[valid_dam_mask])) if np.any(valid_dam_mask) else float(
-                np.nanmin(final_dem))
+            exit_description = "il bordo del DEM / NoData"
 
-        # 3. CALCOLO AUTOMATICO DEL PUNTO DI SEME (A monte tramite gradiente)
-        grad_row, grad_col = np.gradient(dem_array, pixel_size_y, pixel_size_x)
+        result = {'status': status, 'level': level, 'seed': (seed_x, seed_y),
+                  'seed_z': float(final_dem[seed_rc]), 'exit_description': exit_description,
+                  'volume': 0.0, 'area': 0.0, 'max_depth': 0.0, 'layer': None, 'rlake_volume': None}
 
-        col_c = int((x0 - extent.xMinimum()) / pixel_size_x)
-        row_c = int((extent.yMaximum() - y0) / pixel_size_y)
+        # Punti di controllo, sempre caricati nella TOC
+        status_note = {
+            'ok': "Lago trattenuto, sfioro verso valle",
+            'border': "Lo sfioro avviene verso il bordo del DEM: lago probabilmente troncato",
+            'not_effective': "L'acqua dal seed raggiunge " + exit_description + " senza invaso",
+        }[status]
+        points = [
+            {'ruolo': "Seed a monte", 'x': seed_x, 'y': seed_y, 'quota_dem': float(dem_array[seed_rc]),
+             'quota_sfioro': level, 'stato': status,
+             'nota': f"{status_note} | persistenza alveo {persistence:.2f} m"},
+            {'ruolo': "Punto di valle", 'x': outlet_x, 'y': outlet_y, 'quota_dem': float(dem_array[outlet_rc]),
+             'quota_sfioro': level, 'stato': status, 'nota': "Uscita dell'alveo a valle del cuneo"},
+        ]
+        if exit_rc is not None and tuple(exit_rc) != tuple(outlet_rc):
+            exit_x, exit_y = cell_center(exit_rc)
+            points.append({'ruolo': "Punto di tracimazione", 'x': exit_x, 'y': exit_y,
+                           'quota_dem': float(final_dem[exit_rc]), 'quota_sfioro': level, 'stato': status,
+                           'nota': "Cella da cui l'acqua esce dal dominio"})
 
-        col_c = np.clip(col_c, 0, cols - 1)
-        row_c = np.clip(row_c, 0, rows - 1)
+        log_msg = (f"Lago [{status}]: quota sfioro {level:.2f} m (cresta max {max_level:.2f} m) | "
+                   f"seed {seed_x:.2f}, {seed_y:.2f} (z {float(dem_array[seed_rc]):.2f} m) | "
+                   f"valle {outlet_x:.2f}, {outlet_y:.2f} (z {float(dem_array[outlet_rc]):.2f} m) | "
+                   f"uscita: {exit_description} | NoData interni: {spill['internal_nodata_cells']} celle")
+        QgsMessageLog.logMessage(log_msg, "Q-LandslideDam", Qgis.Info)
 
-        g_col = grad_col[row_c, col_c]
-        g_row = grad_row[row_c, col_c]
+        if status == 'not_effective':
+            self._add_control_points_layer(points, dem_layer.crs())
+            return result
 
-        dz_dx = g_col
-        dz_dy = -g_row
+        depth, volume, area, max_depth = lake_utils.lake_statistics(
+            final_dem, spill['lake_mask'], level, cell_area)
+        result.update(volume=volume, area=area, max_depth=max_depth)
 
-        grad_norm = np.sqrt(dz_dx ** 2 + dz_dy ** 2)
-        if grad_norm > 0:
-            dir_x = dz_dx / grad_norm
-            dir_y = dz_dy / grad_norm
+        layer_name = f"Lago (W = {level:.1f} m, V = {volume:.0f} m³)"
+
+        # 3. Raster del lago con r.lake di GRASS
+        lake_layer = None
+        alg_id = self._rlake_algorithm_id()
+        if alg_id is not None:
+            authid = dem_layer.crs().authid()
+            coordinates = f"{seed_x},{seed_y} [{authid}]" if authid else f"{seed_x},{seed_y}"
+            try:
+                rlake = processing.run(alg_id, {
+                    'elevation': modified_dem_layer,
+                    'water_level': level,
+                    'coordinates': coordinates,
+                    'lake': output_path
+                })
+                lake_layer = QgsRasterLayer(rlake['lake'], layer_name)
+                if lake_layer.isValid():
+                    QgsProject.instance().addMapLayer(lake_layer)
+                    result['rlake_volume'] = self._raster_volume(rlake['lake'], cell_area)
+                else:
+                    lake_layer = None
+            except Exception as e:
+                QgsMessageLog.logMessage(f"r.lake non riuscito, uso il calcolo numpy: {str(e)}",
+                                         "Q-LandslideDam", Qgis.Warning)
+                lake_layer = None
         else:
-            azimuth_rad_val = np.radians(direction_deg)
-            dir_x = np.sin(azimuth_rad_val)
-            dir_y = np.cos(azimuth_rad_val)
+            QgsMessageLog.logMessage("r.lake non disponibile (provider GRASS non attivo), uso il calcolo numpy.",
+                                     "Q-LandslideDam", Qgis.Warning)
 
-        offset_m = 75.0
-        seed_x = x0 + (dir_x * offset_m)
-        seed_y = y0 + (dir_y * offset_m)
+        # Ripiego: raster delle profondità calcolato in numpy
+        if lake_layer is None:
+            lake_layer = self.save_and_load_raster(
+                numpy_array=depth,
+                reference_layer=dem_layer,
+                output_path=output_path,
+                layer_name=layer_name,
+                nodata_value=-9999.0
+            )
+        result['layer'] = lake_layer
 
-        # --- MODALITA' DEBUG: STAMPA E STOP SENZA LANCIARE r.lake ---
-        debug_msg = f"CREST DEBUG -> Quota: {spillover_elevation:.2f} m | Seed: {seed_x:.2f}, {seed_y:.2f}"
+        # Aggiunto dopo il raster del lago, così i punti restano visibili sopra di esso
+        self._add_control_points_layer(points, dem_layer.crs())
 
-        self.iface.messageBar().pushMessage("Q-LandslideDam Crest", debug_msg, Qgis.Info)
+        volume_msg = f"Lago: volume numpy {volume:.1f} m³"
+        if result['rlake_volume'] is not None:
+            volume_msg += f" | volume r.lake {result['rlake_volume']:.1f} m³"
+        QgsMessageLog.logMessage(volume_msg, "Q-LandslideDam", Qgis.Info)
 
-        print("--- Q-LANDSLIDE DAM CREST DEBUG ---")
-        print(f"Raster DEM Modificato: {modified_dem_layer.source()}")
-        print(f"Water Level (Quota di Cresta): {spillover_elevation}")
-        print(f"Coordinates (Seed): {seed_x},{seed_y}")
-        print("-----------------------------------")
-
-        # Restituiamo None per bloccare l'esecuzione automatica di r.lake
-        return None, spillover_elevation, seed_x, seed_y
+        return result
