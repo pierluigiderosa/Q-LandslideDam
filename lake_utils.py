@@ -64,7 +64,7 @@ def dam_footprint(thickness_array):
     """Impronta del cuneo: componente principale delle celle con spessore > 0, senza buchi interni."""
     footprint = thickness_array > 0
     if not np.any(footprint):
-        raise ValueError("Il cuneo non ha celle con spessore positivo.")
+        raise ValueError("The wedge has no cells with positive thickness.")
     start = np.unravel_index(np.argmax(thickness_array), thickness_array.shape)
     footprint = connected_region(footprint, start)
     outside = connected_to(~footprint, _border_mask(footprint.shape))
@@ -140,7 +140,7 @@ def _ring_crossings(dem_array, ring):
             best_persistence, best_cell = persistence, comp_min[root]
 
     if best_cell is None:
-        raise ValueError("Impossibile individuare l'alveo a monte attorno al cuneo.")
+        raise ValueError("Unable to locate the upstream channel around the wedge.")
     return divmod(outlet, cols), divmod(best_cell, cols), best_persistence
 
 
@@ -158,7 +158,7 @@ def find_seed_and_outlet(dem_array, thickness_array, ring_cells=3):
         ring = _dilate8(ring)
     ring &= ~footprint & ~np.isnan(dem_array)
     if not np.any(ring):
-        raise ValueError("Nessuna cella valida del DEM attorno al cuneo.")
+        raise ValueError("No valid DEM cells around the wedge.")
 
     outlet_rc, inlet_rc, persistence = _ring_crossings(dem_array, ring)
     return tuple(int(v) for v in inlet_rc), tuple(int(v) for v in outlet_rc), persistence

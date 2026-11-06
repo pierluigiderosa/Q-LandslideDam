@@ -359,8 +359,8 @@ class QLandslideDam:
             return new_layer
         else:
             self.iface.messageBar().pushMessage(
-                "Errore",
-                "Impossibile caricare il raster generato.",
+                "Error",
+                "Unable to load the generated raster.",
                 Qgis.Critical
             )
             return None
@@ -468,8 +468,8 @@ class QLandslideDam:
         dem_layer = self.dlg.DEM_raster_ComboBox.currentLayer()
         if not dem_layer:
             self.iface.messageBar().pushMessage(
-                "Attenzione",
-                "Seleziona un DEM valido.",
+                "Warning",
+                "Please select a valid DEM.",
                 Qgis.Warning
             )
             return
@@ -478,12 +478,12 @@ class QLandslideDam:
         # (lat/lon) o unità diverse dal metro distanze, pendenze e volumi sarebbero errati
         crs = dem_layer.crs()
         if not crs.isValid() or crs.isGeographic() or crs.mapUnits() != QgsUnitTypes.DistanceMeters:
-            crs_name = crs.authid() or crs.description() or "non definito"
+            crs_name = crs.authid() or crs.description() or "undefined"
             self.iface.messageBar().pushMessage(
-                "Attenzione",
-                f"Il DEM '{dem_layer.name()}' è nel sistema di riferimento {crs_name}, che non è proiettato in metri. "
-                "Il plugin lavora solo con raster in un sistema proiettato metrico (es. UTM): "
-                "riproietta il DEM (Raster > Proiezioni > Riproietta) e riprova.",
+                "Warning",
+                f"The DEM '{dem_layer.name()}' uses the CRS {crs_name}, which is not projected in meters. "
+                "The plugin only works with rasters in a projected metric CRS (e.g. UTM): "
+                "reproject the DEM (Raster > Projections > Warp (Reproject)) and try again.",
                 Qgis.Warning
             )
             return
@@ -495,10 +495,10 @@ class QLandslideDam:
                               or ('+proj=merc' in proj and '+a=6378137' in proj and '+b=6378137' in proj))
         if is_pseudo_mercator:
             self.iface.messageBar().pushMessage(
-                "Attenzione",
-                f"Il DEM '{dem_layer.name()}' è in Pseudo-Mercator ({crs.authid() or crs.description()}), "
+                "Warning",
+                f"The DEM '{dem_layer.name()}' is in Pseudo-Mercator ({crs.authid() or crs.description()}), "
                 "che deforma distanze e aree (alle latitudini italiane i volumi risultano circa doppi). "
-                "Riproietta il DEM in un sistema proiettato metrico locale (es. UTM) e riprova.",
+                "Reproject the DEM to a local projected metric CRS (e.g. UTM) and try again.",
                 Qgis.Warning
             )
             return
@@ -515,8 +515,8 @@ class QLandslideDam:
         # Controllo di sicurezza: verifica che le coordinate siano inserite
         if x_coord == 0 and y_coord == 0:
             self.iface.messageBar().pushMessage(
-                "Attenzione",
-                "Inserisci le coordinate X e Y oppure seleziona un punto sulla mappa.",
+                "Warning",
+                "Enter the X and Y coordinates or pick a point on the map.",
                 Qgis.Warning
             )
             return
@@ -538,8 +538,8 @@ class QLandslideDam:
             )
         except Exception as e:
             self.iface.messageBar().pushMessage(
-                "Errore di calcolo",
-                f"Errore durante l'elaborazione del cuneo: {str(e)}",
+                "Calculation error",
+                f"Error while computing the wedge: {str(e)}",
                 Qgis.Critical
             )
             return
@@ -548,7 +548,7 @@ class QLandslideDam:
         if self.dlg.chk_save_permanent.isChecked():
             output_file, _ = QFileDialog.getSaveFileName(
                 self.dlg,
-                "Salva DEM Diga Permanente",
+                "Save Landslide Dam DEM",
                 "",
                 "GeoTIFF Files (*.tif);;All Files (*)"
             )
@@ -569,7 +569,7 @@ class QLandslideDam:
             numpy_array=final_dem,
             reference_layer=dem_layer,
             output_path=output_file,
-            layer_name=f"DEM Diga ({vol_calc:.0f} m³)",
+            layer_name=f"Dam DEM ({vol_calc:.0f} m³)",
             hillshade=True
         )
 
@@ -577,7 +577,7 @@ class QLandslideDam:
         if loaded_layer:
             self.iface.messageBar().pushMessage(
                 "Q-LandslideDam",
-                f"Iterazioni: {num_iter} | Volume richiesto: {volume} m³ | Volume ottenuto: {vol_calc:.1f} m³",
+                f"Iterations: {num_iter} | Target volume: {volume} m³ | Computed volume: {vol_calc:.1f} m³",
                 Qgis.Info
             )
 
@@ -596,8 +596,8 @@ class QLandslideDam:
                 )
             except Exception as e:
                 self.iface.messageBar().pushMessage(
-                    "Errore lago",
-                    f"Calcolo del lago di sbarramento non riuscito: {str(e)}",
+                    "Lake error",
+                    f"Dammed lake calculation failed: {str(e)}",
                     Qgis.Warning
                 )
                 lake = None
@@ -607,20 +607,20 @@ class QLandslideDam:
                 if lake['status'] == 'not_effective':
                     self.iface.messageBar().pushMessage(
                         "Q-LandslideDam",
-                        f"Lo sbarramento non chiude la valle: dal seed ({seed_x:.1f}, {seed_y:.1f}, "
-                        f"quota {lake['seed_z']:.2f} m) l'acqua esce verso {lake['exit_description']} "
-                        f"senza invaso. Controlla il layer 'Lago - punti di controllo'.",
+                        f"The dam does not block the valley: from the seed ({seed_x:.1f}, {seed_y:.1f}, "
+                        f"elevation {lake['seed_z']:.2f} m) water flows out through {lake['exit_description']} "
+                        f"without impoundment. Check the 'Lake - control points' layer.",
                         Qgis.Warning
                     )
                 else:
-                    lake_msg = (f"Lago: quota {lake['level']:.2f} m | volume {lake['volume']:.0f} m³ | "
-                                f"area {lake['area'] / 10000.0:.2f} ha | prof. max {lake['max_depth']:.1f} m | "
+                    lake_msg = (f"Lake: level {lake['level']:.2f} m | volume {lake['volume']:.0f} m³ | "
+                                f"area {lake['area'] / 10000.0:.2f} ha | max depth {lake['max_depth']:.1f} m | "
                                 f"seed {seed_x:.1f}, {seed_y:.1f}")
                     if lake['status'] == 'border':
                         self.iface.messageBar().pushMessage(
                             "Q-LandslideDam",
-                            lake_msg + " | ATTENZIONE: il lago raggiunge il bordo del DEM e può essere troncato, "
-                                       "usa un DEM più esteso.",
+                            lake_msg + " | WARNING: the lake reaches the DEM edge and may be truncated, "
+                                       "use a larger DEM.",
                             Qgis.Warning
                         )
                     else:
@@ -642,17 +642,17 @@ class QLandslideDam:
         Aggiunge alla TOC un layer temporaneo con i punti di controllo del lago
         (seed, punto di valle, punto di tracimazione) e i relativi attributi.
         """
-        layer = QgsVectorLayer("Point", "Lago - punti di controllo", "memory")
+        layer = QgsVectorLayer("Point", "Lake - control points", "memory")
         layer.setCrs(crs)
         provider = layer.dataProvider()
         provider.addAttributes([
-            QgsField("ruolo", QVariant.String),
+            QgsField("role", QVariant.String),
             QgsField("x", QVariant.Double),
             QgsField("y", QVariant.Double),
-            QgsField("quota_dem", QVariant.Double),
-            QgsField("quota_sfioro", QVariant.Double),
-            QgsField("stato", QVariant.String),
-            QgsField("nota", QVariant.String),
+            QgsField("dem_elev", QVariant.Double),
+            QgsField("spill_level", QVariant.Double),
+            QgsField("status", QVariant.String),
+            QgsField("note", QVariant.String),
         ])
         layer.updateFields()
 
@@ -660,8 +660,8 @@ class QLandslideDam:
         for point in points:
             feature = QgsFeature(layer.fields())
             feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(point['x'], point['y'])))
-            feature.setAttributes([point['ruolo'], point['x'], point['y'], point['quota_dem'],
-                                   point['quota_sfioro'], point['stato'], point['nota']])
+            feature.setAttributes([point['role'], point['x'], point['y'], point['dem_elev'],
+                                   point['spill_level'], point['status'], point['note']])
             features.append(feature)
         provider.addFeatures(features)
         layer.updateExtents()
@@ -712,11 +712,11 @@ class QLandslideDam:
         exit_rc = spill['exit_rc']
 
         if exit_rc is None:
-            exit_description = "nessuna uscita"
+            exit_description = "no outlet"
         elif tuple(exit_rc) == tuple(outlet_rc):
-            exit_description = "il punto di valle"
+            exit_description = "the downstream point"
         else:
-            exit_description = "il bordo del DEM / NoData"
+            exit_description = "the DEM edge / NoData"
 
         result = {'status': status, 'level': level, 'seed': (seed_x, seed_y),
                   'seed_z': float(final_dem[seed_rc]), 'exit_description': exit_description,
@@ -724,27 +724,27 @@ class QLandslideDam:
 
         # Punti di controllo, sempre caricati nella TOC
         status_note = {
-            'ok': "Lago trattenuto, sfioro verso valle",
-            'border': "Lo sfioro avviene verso il bordo del DEM: lago probabilmente troncato",
-            'not_effective': "L'acqua dal seed raggiunge " + exit_description + " senza invaso",
+            'ok': "Lake impounded, spillway towards downstream",
+            'border': "Spill occurs towards the DEM edge: lake probably truncated",
+            'not_effective': "Water from the seed reaches " + exit_description + " without impoundment",
         }[status]
         points = [
-            {'ruolo': "Seed a monte", 'x': seed_x, 'y': seed_y, 'quota_dem': float(dem_array[seed_rc]),
-             'quota_sfioro': level, 'stato': status,
-             'nota': f"{status_note} | persistenza alveo {persistence:.2f} m"},
-            {'ruolo': "Punto di valle", 'x': outlet_x, 'y': outlet_y, 'quota_dem': float(dem_array[outlet_rc]),
-             'quota_sfioro': level, 'stato': status, 'nota': "Uscita dell'alveo a valle del cuneo"},
+            {'role': "Upstream seed", 'x': seed_x, 'y': seed_y, 'dem_elev': float(dem_array[seed_rc]),
+             'spill_level': level, 'status': status,
+             'note': f"{status_note} | channel persistence {persistence:.2f} m"},
+            {'role': "Downstream point", 'x': outlet_x, 'y': outlet_y, 'dem_elev': float(dem_array[outlet_rc]),
+             'spill_level': level, 'status': status, 'note': "Channel outlet downstream of the wedge"},
         ]
         if exit_rc is not None and tuple(exit_rc) != tuple(outlet_rc):
             exit_x, exit_y = cell_center(exit_rc)
-            points.append({'ruolo': "Punto di tracimazione", 'x': exit_x, 'y': exit_y,
-                           'quota_dem': float(final_dem[exit_rc]), 'quota_sfioro': level, 'stato': status,
-                           'nota': "Cella da cui l'acqua esce dal dominio"})
+            points.append({'role': "Overflow point", 'x': exit_x, 'y': exit_y,
+                           'dem_elev': float(final_dem[exit_rc]), 'spill_level': level, 'status': status,
+                           'note': "Cell where water leaves the domain"})
 
-        log_msg = (f"Lago [{status}]: quota sfioro {level:.2f} m (cresta max {max_level:.2f} m) | "
+        log_msg = (f"Lake [{status}]: spill level {level:.2f} m (max crest {max_level:.2f} m) | "
                    f"seed {seed_x:.2f}, {seed_y:.2f} (z {float(dem_array[seed_rc]):.2f} m) | "
-                   f"valle {outlet_x:.2f}, {outlet_y:.2f} (z {float(dem_array[outlet_rc]):.2f} m) | "
-                   f"uscita: {exit_description} | NoData interni: {spill['internal_nodata_cells']} celle")
+                   f"downstream {outlet_x:.2f}, {outlet_y:.2f} (z {float(dem_array[outlet_rc]):.2f} m) | "
+                   f"outlet: {exit_description} | internal NoData: {spill['internal_nodata_cells']} cells")
         QgsMessageLog.logMessage(log_msg, "Q-LandslideDam", Qgis.Info)
 
         if status == 'not_effective':
@@ -755,7 +755,7 @@ class QLandslideDam:
             final_dem, spill['lake_mask'], level, cell_area)
         result.update(volume=volume, area=area, max_depth=max_depth)
 
-        layer_name = f"Lago (W = {level:.1f} m, V = {volume:.0f} m³)"
+        layer_name = f"Lake (W = {level:.1f} m, V = {volume:.0f} m³)"
 
         # 3. Raster del lago con r.lake di GRASS
         lake_layer = None
@@ -777,11 +777,11 @@ class QLandslideDam:
                 else:
                     lake_layer = None
             except Exception as e:
-                QgsMessageLog.logMessage(f"r.lake non riuscito, uso il calcolo numpy: {str(e)}",
+                QgsMessageLog.logMessage(f"r.lake failed, falling back to numpy: {str(e)}",
                                          "Q-LandslideDam", Qgis.Warning)
                 lake_layer = None
         else:
-            QgsMessageLog.logMessage("r.lake non disponibile (provider GRASS non attivo), uso il calcolo numpy.",
+            QgsMessageLog.logMessage("r.lake not available (GRASS provider not active), falling back to numpy.",
                                      "Q-LandslideDam", Qgis.Warning)
 
         # Ripiego: raster delle profondità calcolato in numpy
@@ -798,7 +798,7 @@ class QLandslideDam:
         # Aggiunto dopo il raster del lago, così i punti restano visibili sopra di esso
         self._add_control_points_layer(points, dem_layer.crs())
 
-        volume_msg = f"Lago: volume numpy {volume:.1f} m³"
+        volume_msg = f"Lake: numpy volume {volume:.1f} m³"
         if result['rlake_volume'] is not None:
             volume_msg += f" | volume r.lake {result['rlake_volume']:.1f} m³"
         QgsMessageLog.logMessage(volume_msg, "Q-LandslideDam", Qgis.Info)

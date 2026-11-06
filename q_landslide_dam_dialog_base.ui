@@ -6,262 +6,424 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>504</width>
-    <height>417</height>
+    <width>520</width>
+    <height>560</height>
    </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>460</width>
+    <height>480</height>
+   </size>
   </property>
   <property name="windowTitle">
    <string>Q-LandslideDam</string>
   </property>
-  <widget class="QDialogButtonBox" name="button_box">
-   <property name="geometry">
-    <rect>
-     <x>30</x>
-     <y>350</y>
-     <width>341</width>
-     <height>32</height>
-    </rect>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>8</number>
    </property>
-   <property name="orientation">
-    <enum>Qt::Horizontal</enum>
+   <property name="leftMargin">
+    <number>10</number>
    </property>
-   <property name="standardButtons">
-    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+   <property name="topMargin">
+    <number>10</number>
    </property>
-  </widget>
-  <widget class="QgsMapLayerComboBox" name="DEM_raster_ComboBox">
-   <property name="geometry">
-    <rect>
-     <x>170</x>
-     <y>40</y>
-     <width>160</width>
-     <height>27</height>
-    </rect>
+   <property name="rightMargin">
+    <number>10</number>
    </property>
-  </widget>
-  <widget class="QLabel" name="label">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>50</y>
-     <width>111</width>
-     <height>16</height>
-    </rect>
+   <property name="bottomMargin">
+    <number>10</number>
    </property>
-   <property name="text">
-    <string>DEM RASTER</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_2">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>170</y>
-     <width>121</width>
-     <height>16</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Direction</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_3">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>200</y>
-     <width>121</width>
-     <height>16</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Inclination</string>
-   </property>
-  </widget>
-  <widget class="QSpinBox" name="DirectionBox">
-   <property name="geometry">
-    <rect>
-     <x>170</x>
-     <y>170</y>
-     <width>91</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <property name="maximum">
-    <number>360</number>
-   </property>
-  </widget>
-  <widget class="QSpinBox" name="InclinationBox">
-   <property name="geometry">
-    <rect>
-     <x>170</x>
-     <y>200</y>
-     <width>91</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <property name="maximum">
-    <number>90</number>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_4">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>240</y>
-     <width>81</width>
-     <height>16</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Volume (mc)</string>
-   </property>
-  </widget>
-  <widget class="QSpinBox" name="VolumeBox">
-   <property name="geometry">
-    <rect>
-     <x>170</x>
-     <y>240</y>
-     <width>91</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <property name="maximum">
-    <number>99999999</number>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_5">
-   <property name="geometry">
-    <rect>
-     <x>50</x>
-     <y>280</y>
-     <width>101</width>
-     <height>16</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Crest inclination</string>
-   </property>
-  </widget>
-  <widget class="QSpinBox" name="CrestSlopeBox">
-   <property name="geometry">
-    <rect>
-     <x>180</x>
-     <y>280</y>
-     <width>101</width>
-     <height>22</height>
-    </rect>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="btn_select_point">
-   <property name="geometry">
-    <rect>
-     <x>170</x>
-     <y>80</y>
-     <width>161</width>
-     <height>28</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Cattura Coordinate</string>
-   </property>
-  </widget>
-  <widget class="QDoubleSpinBox" name="spin_x">
-   <property name="geometry">
-    <rect>
-     <x>170</x>
-     <y>110</y>
-     <width>161</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <property name="decimals">
-    <number>2</number>
-   </property>
-   <property name="minimum">
-    <double>-99999999.000000000000000</double>
-   </property>
-   <property name="maximum">
-    <double>99999999.000000000000000</double>
-   </property>
-   <property name="singleStep">
-    <double>5.000000000000000</double>
-   </property>
-  </widget>
-  <widget class="QDoubleSpinBox" name="spin_y">
-   <property name="geometry">
-    <rect>
-     <x>170</x>
-     <y>140</y>
-     <width>161</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <property name="minimum">
-    <double>-99999999.000000000000000</double>
-   </property>
-   <property name="maximum">
-    <double>99999999.000000000000000</double>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_6">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>110</y>
-     <width>91</width>
-     <height>16</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Coordinate&lt;span style=&quot; font-weight:600;&quot;&gt; X&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_7">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>140</y>
-     <width>81</width>
-     <height>16</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Coordinate &lt;span style=&quot; font-weight:600;&quot;&gt;Y&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="btn_settings">
-   <property name="geometry">
-    <rect>
-     <x>400</x>
-     <y>40</y>
-     <width>93</width>
-     <height>28</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="text">
-    <string>Settings</string>
-   </property>
-  </widget>
-  <widget class="QCheckBox" name="chk_save_permanent">
-   <property name="geometry">
-    <rect>
-     <x>170</x>
-     <y>320</y>
-     <width>181</width>
-     <height>20</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Save raster permanently</string>
-   </property>
-  </widget>
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tab_main">
+      <attribute name="title">
+       <string>Landslide Dam</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tabMainLayout">
+       <property name="spacing">
+        <number>10</number>
+       </property>
+       <item>
+        <widget class="QGroupBox" name="grp_input">
+         <property name="title">
+          <string>Input DEM</string>
+         </property>
+         <layout class="QGridLayout" name="gridInput" columnstretch="0,1,0">
+          <property name="horizontalSpacing">
+           <number>10</number>
+          </property>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label">
+            <property name="text">
+             <string>DEM raster</string>
+            </property>
+            <property name="buddy">
+             <cstring>DEM_raster_ComboBox</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QgsMapLayerComboBox" name="DEM_raster_ComboBox">
+            <property name="toolTip">
+             <string>DEM in a projected metric CRS (e.g. UTM)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="btn_settings">
+            <property name="toolTip">
+             <string>Advanced settings: vertical step, max iterations, max radius</string>
+            </property>
+            <property name="text">
+             <string>Settings</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="grp_point">
+         <property name="title">
+          <string>Landslide point</string>
+         </property>
+         <layout class="QGridLayout" name="gridPoint" columnstretch="0,1">
+          <property name="horizontalSpacing">
+           <number>10</number>
+          </property>
+          <item row="0" column="0" colspan="2">
+           <widget class="QPushButton" name="btn_select_point">
+            <property name="toolTip">
+             <string>Click a point on the map to capture its coordinates</string>
+            </property>
+            <property name="text">
+             <string>Capture Coordinates</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_6">
+            <property name="text">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Coordinate&lt;span style=&quot; font-weight:600;&quot;&gt; X&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+            <property name="buddy">
+             <cstring>spin_x</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QDoubleSpinBox" name="spin_x">
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>-99999999.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>99999999.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>5.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_7">
+            <property name="text">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Coordinate &lt;span style=&quot; font-weight:600;&quot;&gt;Y&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+            <property name="buddy">
+             <cstring>spin_y</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QDoubleSpinBox" name="spin_y">
+            <property name="minimum">
+             <double>-99999999.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>99999999.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="grp_params">
+         <property name="title">
+          <string>Landslide parameters</string>
+         </property>
+         <layout class="QGridLayout" name="gridParams" columnstretch="0,1">
+          <property name="horizontalSpacing">
+           <number>10</number>
+          </property>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_2">
+            <property name="text">
+             <string>Landslide direction</string>
+            </property>
+            <property name="buddy">
+             <cstring>DirectionBox</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QSpinBox" name="DirectionBox">
+            <property name="toolTip">
+             <string>Direction of landslide movement (azimuth, degrees from North, clockwise, 0–359°). The dam crest axis lies along this direction, across the valley. The dam is symmetric: θ and θ+180° give the same deposit.</string>
+            </property>
+            <property name="wrapping">
+             <bool>true</bool>
+            </property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="maximum">
+             <number>359</number>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_3">
+            <property name="text">
+             <string>Face slope (upstream/downstream)</string>
+            </property>
+            <property name="buddy">
+             <cstring>InclinationBox</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="InclinationBox">
+            <property name="toolTip">
+             <string>Slope of the upstream and downstream faces of the dam (same value for both). Typical values: 25–40° (angle of repose of the deposit).</string>
+            </property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="maximum">
+             <number>90</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_5">
+            <property name="text">
+             <string>Crest slope (along axis)</string>
+            </property>
+            <property name="buddy">
+             <cstring>CrestSlopeBox</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="CrestSlopeBox">
+            <property name="toolTip">
+             <string>Slope of the crest along its axis, descending from the selected point towards both valley sides. 0° = horizontal crest. Typical values: 0–10°.</string>
+            </property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="maximum">
+             <number>45</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_4">
+            <property name="text">
+             <string>Volume</string>
+            </property>
+            <property name="buddy">
+             <cstring>VolumeBox</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="VolumeBox">
+            <property name="toolTip">
+             <string>Target volume of the landslide deposit</string>
+            </property>
+            <property name="suffix">
+             <string> m³</string>
+            </property>
+            <property name="maximum">
+             <number>99999999</number>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="grp_output">
+         <property name="title">
+          <string>Output</string>
+         </property>
+         <layout class="QGridLayout" name="gridOutput">
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="chk_save_permanent">
+            <property name="toolTip">
+             <string>If unchecked, the output DEM is saved in a temporary folder</string>
+            </property>
+            <property name="text">
+             <string>Save raster permanently</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_credits">
+      <attribute name="title">
+       <string>Credits</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tabCreditsLayout">
+       <item>
+        <widget class="QTextBrowser" name="text_credits">
+         <property name="openExternalLinks">
+          <bool>true</bool>
+         </property>
+         <property name="html">
+          <string>&lt;html&gt;&lt;body style=&quot;font-family:sans-serif;&quot;&gt;
+&lt;h2 style=&quot;color:#2c5f8a;&quot;&gt;Q-LandslideDam&lt;/h2&gt;
+&lt;p&gt;A QGIS plugin for modeling landslide dams and river channel obstructions using wedge geometries, with automatic calculation of the upstream dammed lake.&lt;/p&gt;
+&lt;h3&gt;Author&lt;/h3&gt;
+&lt;p&gt;&lt;b&gt;Pierluigi De Rosa&lt;/b&gt;&lt;br/&gt;
+&lt;a href=&quot;mailto:pierluigi.derosa@gmail.com&quot;&gt;pierluigi.derosa@gmail.com&lt;/a&gt;&lt;/p&gt;
+&lt;h3&gt;Project&lt;/h3&gt;
+&lt;p&gt;Repository: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam&quot;&gt;github.com/pierluigiderosa/Q-LandslideDam&lt;/a&gt;&lt;br/&gt;
+Bug reports: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam/issues&quot;&gt;issue tracker&lt;/a&gt;&lt;/p&gt;
+&lt;h3&gt;Built with&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://qgis.org&quot;&gt;QGIS&lt;/a&gt; and PyQGIS&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://grass.osgeo.org/grass-stable/manuals/r.lake.html&quot;&gt;GRASS GIS r.lake&lt;/a&gt; for filling the dammed lake&lt;/li&gt;
+&lt;li&gt;NumPy and GDAL&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;License&lt;/h3&gt;
+&lt;p&gt;This program is free software, released under the terms of the GNU General Public License version 2 or later.&lt;/p&gt;
+&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_instructions">
+      <attribute name="title">
+       <string>Instructions</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tabInstructionsLayout">
+       <item>
+        <widget class="QTextBrowser" name="text_instructions">
+         <property name="openExternalLinks">
+          <bool>true</bool>
+         </property>
+         <property name="html">
+          <string>&lt;html&gt;&lt;body style=&quot;font-family:sans-serif;&quot;&gt;
+&lt;h2 style=&quot;color:#2c5f8a;&quot;&gt;Instructions&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;b&gt;DEM raster&lt;/b&gt;: select the DEM. It must use a projected CRS in meters (e.g. UTM); geographic coordinates and Pseudo-Mercator (EPSG:3857) are not allowed.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Landslide point&lt;/b&gt;: press &lt;i&gt;Capture Coordinates&lt;/i&gt; and click on the map where the landslide reaches the river channel, or type the X and Y coordinates manually.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Landslide parameters&lt;/b&gt;:
+&lt;ul&gt;
+&lt;li&gt;&lt;i&gt;Landslide direction&lt;/i&gt;: direction of landslide movement, in degrees from North, clockwise (0–359°); the dam crest axis lies along it; see &lt;i&gt;Landslide direction&lt;/i&gt; below;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Face slope (upstream/downstream)&lt;/i&gt;: slope of the upstream and downstream faces, same value for both (typically 25–40°);&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Crest slope (along axis)&lt;/i&gt;: slope of the crest along its axis, from the selected point towards both valley sides; 0° = horizontal crest (typically 0–10°);&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Volume&lt;/i&gt;: volume of the landslide deposit (m³).&lt;/li&gt;
+&lt;/ul&gt;&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Settings&lt;/b&gt;: advanced parameters of the iterative algorithm (vertical step, maximum iterations, maximum radius).&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Output&lt;/b&gt;: check &lt;i&gt;Save raster permanently&lt;/i&gt; to choose where to save the modified DEM; otherwise it is saved to a temporary folder.&lt;/li&gt;
+&lt;li&gt;Press &lt;b&gt;OK&lt;/b&gt; to run the calculation.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3&gt;Dam geometry&lt;/h3&gt;
+&lt;p&gt;The dam is a four-sided pyramid with its apex at the selected point. Its surface is:&lt;/p&gt;
+&lt;p align=&quot;center&quot;&gt;&lt;i&gt;z = (z&lt;sub&gt;0&lt;/sub&gt; + h) − |d&lt;sub&gt;axis&lt;/sub&gt;| · tan(crest slope) − |d&lt;sub&gt;river&lt;/sub&gt;| · tan(face slope)&lt;/i&gt;&lt;/p&gt;
+&lt;p&gt;where &lt;i&gt;z&lt;sub&gt;0&lt;/sub&gt;&lt;/i&gt; is the DEM elevation at the selected point, &lt;i&gt;h&lt;/i&gt; is the dam height (raised step by step until the target volume is reached), &lt;i&gt;d&lt;sub&gt;axis&lt;/sub&gt;&lt;/i&gt; is the distance along the crest axis and &lt;i&gt;d&lt;sub&gt;river&lt;/sub&gt;&lt;/i&gt; the distance across it (upstream–downstream). The body is clipped by the terrain (valley sides) and by the &lt;i&gt;Max Radius&lt;/i&gt; set in Settings.&lt;/p&gt;
+&lt;pre&gt;
+  SECTION ALONG THE RIVER        SECTION ALONG THE CREST
+  (upstream → downstream)        (bank → bank)
+
+            crest                        crest slope
+             /\                          ___●___
+   face     /  \     face           ____/       \____
+  slope    /    \    slope
+      ____/      \____
+&lt;/pre&gt;
+&lt;p&gt;The model is symmetric: upstream and downstream faces have the same slope, and along the landslide direction the crest descends equally in both senses. As a consequence, directions θ and θ+180° (e.g. 310° and 130°) produce the same deposit.&lt;/p&gt;
+&lt;h3&gt;Landslide direction&lt;/h3&gt;
+&lt;p&gt;Enter the direction in which the landslide &lt;b&gt;moves&lt;/b&gt;, measured &lt;b&gt;clockwise from North&lt;/b&gt; (0° = towards North, 90° = towards East, 180° = towards South, 270° = towards West). The dam crest axis is laid along this direction, so the landslide crosses the valley from the source slope to the opposite bank; the upstream and downstream faces are perpendicular to it.&lt;/p&gt;
+&lt;pre&gt;
+            N (0°)
+            ↑
+   W (270°) ●  E (90°)       ● = selected point
+            S (180°)
+
+  Example: river flowing West → East,
+           landslide from the southern slope moving North (0°)
+
+        northern valley side
+     ~~~~~~~~|~~~~~~~~
+  →  river → ● → river →     crest axis = landslide direction
+     ~~~~~~~~↑~~~~~~~~
+        southern slope (source)
+&lt;/pre&gt;
+&lt;table border=&quot;1&quot; cellpadding=&quot;4&quot; cellspacing=&quot;0&quot;&gt;
+&lt;tr&gt;&lt;th&gt;River flows&lt;/th&gt;&lt;th&gt;Landslide source slope&lt;/th&gt;&lt;th&gt;Landslide direction&lt;/th&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;East–West&lt;/td&gt;&lt;td&gt;southern&lt;/td&gt;&lt;td&gt;0°&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;East–West&lt;/td&gt;&lt;td&gt;northern&lt;/td&gt;&lt;td&gt;180°&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;North–South&lt;/td&gt;&lt;td&gt;western&lt;/td&gt;&lt;td&gt;90°&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;North–South&lt;/td&gt;&lt;td&gt;eastern&lt;/td&gt;&lt;td&gt;270°&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+&lt;p&gt;A landslide perpendicular to the river gives a dam straight across the valley. An oblique direction is allowed and gives an oblique dam: the closer the direction is to the river direction, the more the dam lies along the valley instead of across it, so check that it actually crosses the channel.&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;Note:&lt;/b&gt; North is the &lt;i&gt;grid North&lt;/i&gt; of the DEM CRS (the +Y axis of the map), not true geographic North. In UTM the difference (meridian convergence) is at most a few degrees and is usually negligible.&lt;/p&gt;
+&lt;h3&gt;Results&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;modified DEM including the dam, with hillshade;&lt;/li&gt;
+&lt;li&gt;upstream dammed lake (computed with GRASS &lt;i&gt;r.lake&lt;/i&gt;) with water level, volume, area and maximum depth;&lt;/li&gt;
+&lt;li&gt;lake control points layer.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;If the lake reaches the DEM edge it may be truncated: in that case use a larger DEM. When the GRASS provider is not active in Processing, the lake is computed with an internal NumPy fallback.&lt;/p&gt;
+&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="button_box">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
  </widget>
  <customwidgets>
   <customwidget>
@@ -270,6 +432,19 @@
    <header>qgsmaplayercombobox.h</header>
   </customwidget>
  </customwidgets>
+ <tabstops>
+  <tabstop>tabWidget</tabstop>
+  <tabstop>DEM_raster_ComboBox</tabstop>
+  <tabstop>btn_settings</tabstop>
+  <tabstop>btn_select_point</tabstop>
+  <tabstop>spin_x</tabstop>
+  <tabstop>spin_y</tabstop>
+  <tabstop>DirectionBox</tabstop>
+  <tabstop>InclinationBox</tabstop>
+  <tabstop>CrestSlopeBox</tabstop>
+  <tabstop>VolumeBox</tabstop>
+  <tabstop>chk_save_permanent</tabstop>
+ </tabstops>
  <resources/>
  <connections>
   <connection>
