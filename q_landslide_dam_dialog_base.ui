@@ -402,9 +402,44 @@ Bug reports: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam/
 &lt;ul&gt;
 &lt;li&gt;modified DEM including the dam, with hillshade;&lt;/li&gt;
 &lt;li&gt;upstream dammed lake (computed with GRASS &lt;i&gt;r.lake&lt;/i&gt;) with water level, volume, area and maximum depth;&lt;/li&gt;
-&lt;li&gt;lake control points layer.&lt;/li&gt;
+&lt;li&gt;lake control points layer;&lt;/li&gt;
+&lt;li&gt;results table with all the details of the run (see below).&lt;/li&gt;
 &lt;/ul&gt;
 &lt;p&gt;If the lake reaches the DEM edge it may be truncated: in that case use a larger DEM. When the GRASS provider is not active in Processing, the lake is computed with an internal NumPy fallback.&lt;/p&gt;
+&lt;h3&gt;Results table&lt;/h3&gt;
+&lt;p&gt;Each run adds a temporary table without geometry named &lt;i&gt;Q-LandslideDam results YYYY-MM-DD HH:MM:SS&lt;/i&gt; (date and time of the run), so that results of different runs can be told apart. Open it with &lt;i&gt;Open Attribute Table&lt;/i&gt;; it is not saved to disk and can be removed at any time (use &lt;i&gt;Make Permanent&lt;/i&gt; to keep it). Each row is one value; the columns are:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;b&gt;section&lt;/b&gt;: group of the value (Run, Input, Settings, Dam, Lake);&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;parameter&lt;/b&gt;: name of the value;&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;value&lt;/b&gt;: numeric value (empty for text entries);&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;unit&lt;/b&gt;: unit of measure (m, m a.s.l., m², ha, m³, °, %);&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;text&lt;/b&gt;: text value (names, file paths, status, notes).&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Main parameters:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;b&gt;Run&lt;/b&gt;: date and time, DEM layer, CRS, cell size and path of the output dam DEM;&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Input&lt;/b&gt; / &lt;b&gt;Settings&lt;/b&gt;: the values entered in the dialog and in Settings;&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Dam&lt;/b&gt;:
+&lt;ul&gt;
+&lt;li&gt;&lt;i&gt;Iterations&lt;/i&gt;: number of height steps needed to reach the target volume;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Computed landslide volume&lt;/i&gt;: volume of the modeled deposit;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Volume difference vs target&lt;/i&gt;: (computed − target) / target, in %;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Max deposit thickness&lt;/i&gt;: maximum thickness of the deposit above the original DEM;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Dam footprint area&lt;/i&gt;: plan area covered by the deposit;&lt;/li&gt;
+&lt;/ul&gt;&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Lake&lt;/b&gt;:
+&lt;ul&gt;
+&lt;li&gt;&lt;i&gt;Status&lt;/i&gt;: &lt;i&gt;ok&lt;/i&gt; (lake impounded, spilling downstream), &lt;i&gt;border&lt;/i&gt; (spilling towards the DEM edge, lake probably truncated), &lt;i&gt;not_effective&lt;/i&gt; (the dam does not block the valley) or &lt;i&gt;error&lt;/i&gt;; &lt;i&gt;Note&lt;/i&gt; explains it;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Max dam crest elevation&lt;/i&gt;: highest elevation of the dam;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Spillway level (water surface)&lt;/i&gt;: elevation at which the lake starts to overflow; it is the lake water level;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Freeboard (crest − spillway)&lt;/i&gt;: height of the dam crest above the water level;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Spill outlet&lt;/i&gt;: where the water leaves the lake;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Lake volume (numpy)&lt;/i&gt; / &lt;i&gt;(r.lake)&lt;/i&gt;: stored water volume, computed internally and, if GRASS is available, from the r.lake raster;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Lake area&lt;/i&gt;: flooded area, in m² and ha;&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Max water depth&lt;/i&gt;: maximum depth of the lake (water level minus lake bottom);&lt;/li&gt;
+&lt;li&gt;&lt;i&gt;Upstream seed&lt;/i&gt; / &lt;i&gt;Downstream point&lt;/i&gt;: coordinates and elevations of the control points used to fill the lake (also in the &lt;i&gt;Lake - control points&lt;/i&gt; layer).&lt;/li&gt;
+&lt;/ul&gt;&lt;/li&gt;
+&lt;/ul&gt;
 &lt;/body&gt;&lt;/html&gt;</string>
          </property>
         </widget>

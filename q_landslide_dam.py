@@ -226,7 +226,7 @@ class QLandslideDam:
             # Messaggio di conferma nei settings
             self.iface.messageBar().pushMessage(
                 "Q-LandslideDam",
-                f"Impostazioni aggiornate: Δh = {self.step_h} m | Max Iter = {self.max_iterations} | Raggio = {self.max_radius_m} m",
+                f"Settings updated: Δh = {self.step_h} m | Max Iter = {self.max_iterations} | Radius = {self.max_radius_m} m",
                 Qgis.Info
             )
 
@@ -585,6 +585,7 @@ class QLandslideDam:
             # 2. LAGO DI SBARRAMENTO A MONTE (r.lake di GRASS)
             # =========================================================
             lake_output = os.path.splitext(output_file)[0] + "_lake.tif"
+            lake_error = None
             try:
                 lake = self.calculate_lake_basin(
                     dem_layer=dem_layer,
@@ -601,6 +602,23 @@ class QLandslideDam:
                     Qgis.Warning
                 )
                 lake = None
+                lake_error = str(e)
+
+            # =========================================================
+            # 3. TABELLA RIEPILOGATIVA DEL RUN (layer temporaneo senza geometria)
+            # =========================================================
+            cell_area = dem_layer.rasterUnitsPerPixelX() * dem_layer.rasterUnitsPerPixelY()
+            run_params = {
+                'dem_layer': dem_layer, 'x': x_coord, 'y': y_coord, 'direction': direction,
+                'side_dip': side_dip, 'crest_slope': crest_slope, 'target_volume': volume,
+                'output_file': output_file,
+            }
+            dam_results = {
+                'iterations': num_iter, 'volume': vol_calc,
+                'max_thickness': float(np.nanmax(thickness)) if np.any(thickness > 0) else 0.0,
+                'footprint_area': float(np.count_nonzero(thickness > 0)) * cell_area,
+            }
+            results_table = self._add_results_table(run_params, dam_results, lake, lake_error)
 
             if lake is not None:
                 seed_x, seed_y = lake['seed']
@@ -625,6 +643,12 @@ class QLandslideDam:
                         )
                     else:
                         self.iface.messageBar().pushMessage("Q-LandslideDam", lake_msg, Qgis.Info)
+
+            self.iface.messageBar().pushMessage(
+                "Q-LandslideDam",
+                f"All run details are in the table '{results_table.name()}' (open its attribute table).",
+                Qgis.Info
+            )
 
         # Chiude la finestra al termine dell'operazione
         self.dlg.close()
@@ -665,6 +689,97 @@ class QLandslideDam:
             features.append(feature)
         provider.addFeatures(features)
         layer.updateExtents()
+        QgsProject.instance().addMapLayer(layer)
+        return layer
+
+    def _add_results_table(self, run_params, dam_results, lake, lake_error=None):
+        """
+        Aggiunge alla TOC una tabella temporanea (senza geometria) con tutti i dati del run:
+        input, impostazioni, risultati del cuneo e del lago. Il nome contiene data e ora del run.
+        """
+        run_time = time.strftime("%Y-%m-%d %H:%M:%S")
+        dem_layer = run_params['dem_layer']
+        rows = []
+
+        def add(section, parameter, value=None, unit="", text=""):
+            rows.append((section, parameter, None if value is None else float(value), unit, text))
+
+        # Run
+        add("Run", "Date and time", text=run_time)
+        add("Run", "DEM layer", text=dem_layer.name())
+        add("Run", "DEM CRS", text=dem_layer.crs().authid() or dem_layer.crs().description())
+        add("Run", "DEM cell size X", dem_layer.rasterUnitsPerPixelX(), "m")
+        add("Run", "DEM cell size Y", dem_layer.rasterUnitsPerPixelY(), "m")
+        add("Run", "Output dam DEM file", text=run_params['output_file'])
+
+        # Input
+        add("Input", "Landslide point X", run_params['x'], "m")
+        add("Input", "Landslide point Y", run_params['y'], "m")
+        add("Input", "Landslide direction", run_params['direction'], "°")
+        add("Input", "Face slope (upstream/downstream)", run_params['side_dip'], "°")
+        add("Input", "Crest slope (along axis)", run_params['crest_slope'], "°")
+        add("Input", "Target landslide volume", run_params['target_volume'], "m³")
+
+        # Settings
+        add("Settings", "Vertical step", self.step_h, "m")
+        add("Settings", "Max iterations", self.max_iterations)
+        add("Settings", "Max radius", self.max_radius_m, "m")
+
+        # Dam
+        target = run_params['target_volume']
+        add("Dam", "Iterations", dam_results['iterations'])
+        add("Dam", "Computed landslide volume", dam_results['volume'], "m³")
+        if target:
+            add("Dam", "Volume difference vs target", (dam_results['volume'] - target) / target * 100.0, "%")
+        add("Dam", "Max deposit thickness", dam_results['max_thickness'], "m")
+        add("Dam", "Dam footprint area", dam_results['footprint_area'], "m²")
+
+        # Lake
+        if lake is None:
+            add("Lake", "Status", text="error")
+            add("Lake", "Error", text=lake_error or "lake not computed")
+        else:
+            add("Lake", "Status", text=lake['status'])
+            add("Lake", "Note", text=lake['note'])
+            add("Lake", "Max dam crest elevation", lake['max_crest'], "m a.s.l.")
+            add("Lake", "Spillway level (water surface)", lake['level'], "m a.s.l.")
+            add("Lake", "Freeboard (crest − spillway)", lake['max_crest'] - lake['level'], "m")
+            add("Lake", "Spill outlet", text=lake['exit_description'])
+            if lake['status'] != 'not_effective':
+                add("Lake", "Lake volume (numpy)", lake['volume'], "m³")
+                if lake['rlake_volume'] is not None:
+                    add("Lake", "Lake volume (r.lake)", lake['rlake_volume'], "m³")
+                add("Lake", "Lake area", lake['area'], "m²")
+                add("Lake", "Lake area", lake['area'] / 10000.0, "ha")
+                add("Lake", "Max water depth", lake['max_depth'], "m")
+                if lake['layer'] is not None:
+                    add("Lake", "Lake raster file", text=lake['layer'].source())
+            seed_x, seed_y = lake['seed']
+            outlet_x, outlet_y = lake['outlet']
+            add("Lake", "Upstream seed X", seed_x, "m")
+            add("Lake", "Upstream seed Y", seed_y, "m")
+            add("Lake", "Upstream seed elevation", lake['seed_z'], "m a.s.l.")
+            add("Lake", "Downstream point X", outlet_x, "m")
+            add("Lake", "Downstream point Y", outlet_y, "m")
+            add("Lake", "Downstream point elevation", lake['outlet_z'], "m a.s.l.")
+
+        layer = QgsVectorLayer("None", f"Q-LandslideDam results {run_time}", "memory")
+        provider = layer.dataProvider()
+        provider.addAttributes([
+            QgsField("section", QVariant.String),
+            QgsField("parameter", QVariant.String),
+            QgsField("value", QVariant.Double),
+            QgsField("unit", QVariant.String),
+            QgsField("text", QVariant.String),
+        ])
+        layer.updateFields()
+
+        features = []
+        for row in rows:
+            feature = QgsFeature(layer.fields())
+            feature.setAttributes(list(row))
+            features.append(feature)
+        provider.addFeatures(features)
         QgsProject.instance().addMapLayer(layer)
         return layer
 
@@ -720,6 +835,8 @@ class QLandslideDam:
 
         result = {'status': status, 'level': level, 'seed': (seed_x, seed_y),
                   'seed_z': float(final_dem[seed_rc]), 'exit_description': exit_description,
+                  'outlet': (outlet_x, outlet_y), 'outlet_z': float(dem_array[outlet_rc]),
+                  'max_crest': max_level,
                   'volume': 0.0, 'area': 0.0, 'max_depth': 0.0, 'layer': None, 'rlake_volume': None}
 
         # Punti di controllo, sempre caricati nella TOC
@@ -728,6 +845,7 @@ class QLandslideDam:
             'border': "Spill occurs towards the DEM edge: lake probably truncated",
             'not_effective': "Water from the seed reaches " + exit_description + " without impoundment",
         }[status]
+        result['note'] = status_note
         points = [
             {'role': "Upstream seed", 'x': seed_x, 'y': seed_y, 'dem_elev': float(dem_array[seed_rc]),
              'spill_level': level, 'status': status,
