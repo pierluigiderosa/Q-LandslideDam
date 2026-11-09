@@ -278,6 +278,19 @@
             </property>
            </widget>
           </item>
+          <item row="1" column="0">
+           <widget class="QCheckBox" name="chk_detail_layers">
+            <property name="toolTip">
+             <string>Load the detailed results table and the lake upstream/downstream control points as temporary layers in the Layers panel</string>
+            </property>
+            <property name="text">
+             <string>Load detailed results table and lake control points</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
@@ -311,8 +324,10 @@
 &lt;h2 style=&quot;color:#2c5f8a;&quot;&gt;Q-LandslideDam&lt;/h2&gt;
 &lt;p&gt;A QGIS plugin for modeling landslide dams and river channel obstructions using wedge geometries, with automatic calculation of the upstream dammed lake.&lt;/p&gt;
 &lt;h3&gt;Author&lt;/h3&gt;
-&lt;p&gt;&lt;b&gt;Pierluigi De Rosa&lt;/b&gt;&lt;br/&gt;
+&lt;p&gt;&lt;b&gt;Pierluigi De Rosa&lt;/b&gt; (University of Perugia)&lt;br/&gt;
 &lt;a href=&quot;mailto:pierluigi.derosa@gmail.com&quot;&gt;pierluigi.derosa@gmail.com&lt;/a&gt;&lt;/p&gt;
+&lt;h3&gt;Funding and acknowledgements&lt;/h3&gt;
+&lt;p&gt;Q-LandslideDam plugin was developed by Pierluigi De Rosa (University of Perugia) as part of the project &amp;ldquo;LANDAM &amp;ndash; LANdslide DAMs: Characterization, Prediction, and Emergency Management.&amp;rdquo; This project is included in the activities of the RETURN (multi-Risk sciEnce for resilienT commUnities undeR a changiNg climate) - Spoke 2 &amp;ldquo;Ground Instabilities&amp;rdquo;, funded by the European Union &amp;ndash; NextGenerationEU - PNRR, Mission 4, Component 2, Investment 1.3; D.D. 1243 of August 2, 2022, PE0000005.&lt;/p&gt;
 &lt;h3&gt;Project&lt;/h3&gt;
 &lt;p&gt;Repository: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam&quot;&gt;github.com/pierluigiderosa/Q-LandslideDam&lt;/a&gt;&lt;br/&gt;
 Bug reports: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam/issues&quot;&gt;issue tracker&lt;/a&gt;&lt;/p&gt;
@@ -354,7 +369,7 @@ Bug reports: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam/
 &lt;li&gt;&lt;i&gt;Volume&lt;/i&gt;: volume of the landslide deposit (m³).&lt;/li&gt;
 &lt;/ul&gt;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Settings&lt;/b&gt;: advanced parameters of the iterative algorithm (vertical step, maximum iterations, maximum radius).&lt;/li&gt;
-&lt;li&gt;&lt;b&gt;Output&lt;/b&gt;: check &lt;i&gt;Save raster permanently&lt;/i&gt; to choose where to save the modified DEM; otherwise it is saved to a temporary folder.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Output&lt;/b&gt;: check &lt;i&gt;Save raster permanently&lt;/i&gt; to choose where to save the modified DEM; otherwise it is saved to a temporary folder. &lt;i&gt;Load detailed results table and lake control points&lt;/i&gt; (checked by default) adds the run results table and the lake upstream/downstream control points to the Layers panel as temporary layers; uncheck it to skip them.&lt;/li&gt;
 &lt;li&gt;Press &lt;b&gt;OK&lt;/b&gt; to run the calculation.&lt;/li&gt;
 &lt;/ol&gt;
 &lt;h3&gt;Dam geometry&lt;/h3&gt;
@@ -479,6 +494,7 @@ Bug reports: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam/
   <tabstop>CrestSlopeBox</tabstop>
   <tabstop>VolumeBox</tabstop>
   <tabstop>chk_save_permanent</tabstop>
+  <tabstop>chk_detail_layers</tabstop>
  </tabstops>
  <resources/>
  <connections>

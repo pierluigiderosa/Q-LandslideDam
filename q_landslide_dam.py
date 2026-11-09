@@ -544,6 +544,9 @@ class QLandslideDam:
             )
             return
 
+        # Tabella dei dati dettagliati e punti di controllo del lago nella TOC (opzionali)
+        detail_layers = self.dlg.chk_detail_layers.isChecked()
+
         # --- SCELTA PERCORSO DI SALVATAGGIO (TEMPORANEO O PERMANENTE) ---
         if self.dlg.chk_save_permanent.isChecked():
             output_file, _ = QFileDialog.getSaveFileName(
@@ -593,7 +596,8 @@ class QLandslideDam:
                     final_dem=final_dem,
                     thickness_array=thickness,
                     modified_dem_layer=loaded_layer,
-                    output_path=lake_output
+                    output_path=lake_output,
+                    add_control_points=detail_layers
                 )
             except Exception as e:
                 self.iface.messageBar().pushMessage(
@@ -618,7 +622,9 @@ class QLandslideDam:
                 'max_thickness': float(np.nanmax(thickness)) if np.any(thickness > 0) else 0.0,
                 'footprint_area': float(np.count_nonzero(thickness > 0)) * cell_area,
             }
-            results_table = self._add_results_table(run_params, dam_results, lake, lake_error)
+            results_table = None
+            if detail_layers:
+                results_table = self._add_results_table(run_params, dam_results, lake, lake_error)
 
             if lake is not None:
                 seed_x, seed_y = lake['seed']
@@ -627,7 +633,8 @@ class QLandslideDam:
                         "Q-LandslideDam",
                         f"The dam does not block the valley: from the seed ({seed_x:.1f}, {seed_y:.1f}, "
                         f"elevation {lake['seed_z']:.2f} m) water flows out through {lake['exit_description']} "
-                        f"without impoundment. Check the 'Lake - control points' layer.",
+                        f"without impoundment."
+                        + (" Check the 'Lake - control points' layer." if detail_layers else ""),
                         Qgis.Warning
                     )
                 else:
@@ -644,11 +651,12 @@ class QLandslideDam:
                     else:
                         self.iface.messageBar().pushMessage("Q-LandslideDam", lake_msg, Qgis.Info)
 
-            self.iface.messageBar().pushMessage(
-                "Q-LandslideDam",
-                f"All run details are in the table '{results_table.name()}' (open its attribute table).",
-                Qgis.Info
-            )
+            if results_table is not None:
+                self.iface.messageBar().pushMessage(
+                    "Q-LandslideDam",
+                    f"All run details are in the table '{results_table.name()}' (open its attribute table).",
+                    Qgis.Info
+                )
 
         # Chiude la finestra al termine dell'operazione
         self.dlg.close()
@@ -796,14 +804,15 @@ class QLandslideDam:
         return float(np.sum(depth[valid])) * cell_area
 
     def calculate_lake_basin(self, dem_layer, dem_array, final_dem, thickness_array,
-                             modified_dem_layer, output_path):
+                             modified_dem_layer, output_path, add_control_points=True):
         """
         Calcola il lago di sbarramento a monte del cuneo senza input dell'utente:
         1. seed point e punto di valle dove l'alveo attraversa l'anello attorno al cuneo;
         2. quota di sfioro per bisezione (quota massima senza tracimazione verso valle);
         3. raster delle profondità con r.lake (o in numpy se GRASS non è disponibile);
         4. volume, area e profondità massima del lago.
-        I punti di controllo vengono sempre caricati nella TOC, anche se il lago non si forma.
+        Se add_control_points è True i punti di controllo vengono caricati nella TOC,
+        anche se il lago non si forma.
         """
         extent = dem_layer.extent()
         pixel_size_x = dem_layer.rasterUnitsPerPixelX()
@@ -866,7 +875,8 @@ class QLandslideDam:
         QgsMessageLog.logMessage(log_msg, "Q-LandslideDam", Qgis.Info)
 
         if status == 'not_effective':
-            self._add_control_points_layer(points, dem_layer.crs())
+            if add_control_points:
+                self._add_control_points_layer(points, dem_layer.crs())
             return result
 
         depth, volume, area, max_depth = lake_utils.lake_statistics(
@@ -914,7 +924,8 @@ class QLandslideDam:
         result['layer'] = lake_layer
 
         # Aggiunto dopo il raster del lago, così i punti restano visibili sopra di esso
-        self._add_control_points_layer(points, dem_layer.crs())
+        if add_control_points:
+            self._add_control_points_layer(points, dem_layer.crs())
 
         volume_msg = f"Lake: numpy volume {volume:.1f} m³"
         if result['rlake_volume'] is not None:
