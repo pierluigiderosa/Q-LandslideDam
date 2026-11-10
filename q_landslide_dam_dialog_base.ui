@@ -281,7 +281,7 @@
           <item row="1" column="0">
            <widget class="QCheckBox" name="chk_detail_layers">
             <property name="toolTip">
-             <string>Load the detailed results table and the lake upstream/downstream control points as temporary layers in the Layers panel</string>
+             <string>Load the detailed results table, the landslide point and the lake upstream/downstream control points as temporary layers in the Layers panel</string>
             </property>
             <property name="text">
              <string>Load detailed results table and lake control points</string>
@@ -369,7 +369,7 @@ Bug reports: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam/
 &lt;li&gt;&lt;i&gt;Volume&lt;/i&gt;: volume of the landslide deposit (m³).&lt;/li&gt;
 &lt;/ul&gt;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Settings&lt;/b&gt;: advanced parameters of the iterative algorithm (vertical step, maximum iterations, maximum radius).&lt;/li&gt;
-&lt;li&gt;&lt;b&gt;Output&lt;/b&gt;: check &lt;i&gt;Save raster permanently&lt;/i&gt; to choose where to save the modified DEM; otherwise it is saved to a temporary folder. &lt;i&gt;Load detailed results table and lake control points&lt;/i&gt; (checked by default) adds the run results table and the lake upstream/downstream control points to the Layers panel as temporary layers; uncheck it to skip them.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Output&lt;/b&gt;: check &lt;i&gt;Save raster permanently&lt;/i&gt; to choose where to save the modified DEM; otherwise it is saved to a temporary folder. &lt;i&gt;Load detailed results table and lake control points&lt;/i&gt; (checked by default) adds the run results table, the landslide point and the lake upstream/downstream control points to the Layers panel as temporary layers; uncheck it to skip them.&lt;/li&gt;
 &lt;li&gt;Press &lt;b&gt;OK&lt;/b&gt; to run the calculation.&lt;/li&gt;
 &lt;/ol&gt;
 &lt;h3&gt;Dam geometry&lt;/h3&gt;
@@ -416,7 +416,9 @@ Bug reports: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam/
 &lt;h3&gt;Results&lt;/h3&gt;
 &lt;ul&gt;
 &lt;li&gt;modified DEM including the dam, with hillshade;&lt;/li&gt;
+&lt;li&gt;wedge thickness raster: the dam body alone, with the deposit thickness in metres (NoData outside the dam);&lt;/li&gt;
 &lt;li&gt;upstream dammed lake (computed with GRASS &lt;i&gt;r.lake&lt;/i&gt;) with water level, volume, area and maximum depth;&lt;/li&gt;
+&lt;li&gt;landslide point layer (the point clicked on the map or entered as coordinates), with the wedge parameters and results;&lt;/li&gt;
 &lt;li&gt;lake control points layer;&lt;/li&gt;
 &lt;li&gt;results table with all the details of the run (see below).&lt;/li&gt;
 &lt;/ul&gt;
@@ -432,7 +434,7 @@ Bug reports: &lt;a href=&quot;https://github.com/pierluigiderosa/Q-LandslideDam/
 &lt;/ul&gt;
 &lt;p&gt;Main parameters:&lt;/p&gt;
 &lt;ul&gt;
-&lt;li&gt;&lt;b&gt;Run&lt;/b&gt;: date and time, DEM layer, CRS, cell size and path of the output dam DEM;&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Run&lt;/b&gt;: date and time, DEM layer, path of the input DEM, CRS, cell size and path of the output dam DEM;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Input&lt;/b&gt; / &lt;b&gt;Settings&lt;/b&gt;: the values entered in the dialog and in Settings;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Dam&lt;/b&gt;:
 &lt;ul&gt;

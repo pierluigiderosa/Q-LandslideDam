@@ -26,6 +26,9 @@ from qgis.core import (QgsSettings,
                        QgsMapLayerProxyModel,
                        QgsRasterLayer,
                        QgsHillshadeRenderer,
+                       QgsSingleBandPseudoColorRenderer,
+                       QgsColorRampShader,
+                       QgsRasterShader,
                        QgsVectorLayer,
                        QgsField,
                        QgsFeature,
@@ -38,7 +41,7 @@ from qgis.core import (QgsSettings,
                        QgsUnitTypes,
                        Qgis
                        )
-from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtGui import QIcon, QColor
 from qgis.PyQt.QtWidgets import QAction, QFileDialog
 from qgis.gui import QgsMapToolEmitPoint
 from .settings_dialog import SettingsDialog  # <-- Import della nuova finestra
@@ -306,10 +309,12 @@ class QLandslideDam:
         return d_parallel, d_perpendicular, distance
 
     def save_and_load_raster(self, numpy_array, reference_layer, output_path, layer_name=None,
-                             nodata_value=None, hillshade=False):
+                             nodata_value=None, hillshade=False, color_range=None):
         """
         Salva la matrice NumPy come file GeoTIFF mantenendo il CRS, le dimensioni
         e il geotransform del DEM di riferimento, poi lo carica nella TOC di QGIS.
+        Con color_range=(min, max) applica uno stile a falsi colori limitato a
+        quell'intervallo: i valori esterni non vengono disegnati.
         """
         provider = reference_layer.dataProvider()
         extent = reference_layer.extent()
@@ -358,6 +363,8 @@ class QLandslideDam:
                 renderer = QgsHillshadeRenderer(new_layer.dataProvider(), 1, 315.0, 45.0)
                 renderer.setZFactor(1.0)
                 new_layer.setRenderer(renderer)
+            elif color_range is not None:
+                new_layer.setRenderer(self._pseudocolor_renderer(new_layer, *color_range))
             QgsProject.instance().addMapLayer(new_layer)
             return new_layer
         else:
@@ -367,6 +374,32 @@ class QLandslideDam:
                 Qgis.Critical
             )
             return None
+
+    def _pseudocolor_renderer(self, layer, min_value, max_value):
+        """
+        Stile a falsi colori continuo da min_value a max_value (giallo chiaro -> marrone scuro).
+        Con clip attivo i valori fuori dall'intervallo restano trasparenti.
+        """
+        if max_value <= min_value:
+            max_value = min_value + 1.0
+        colors = ['#ffffcc', '#fed976', '#fd8d3c', '#e31a1c', '#800026']
+        step = (max_value - min_value) / (len(colors) - 1)
+        items = [QgsColorRampShader.ColorRampItem(min_value + i * step, QColor(color),
+                                                  f"{min_value + i * step:.1f}")
+                 for i, color in enumerate(colors)]
+
+        ramp_shader = QgsColorRampShader(min_value, max_value)
+        ramp_shader.setColorRampType(QgsColorRampShader.Interpolated)
+        ramp_shader.setColorRampItemList(items)
+        ramp_shader.setClip(True)
+
+        shader = QgsRasterShader(min_value, max_value)
+        shader.setRasterShaderFunction(ramp_shader)
+
+        renderer = QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1, shader)
+        renderer.setClassificationMin(min_value)
+        renderer.setClassificationMax(max_value)
+        return renderer
 
     def calculate_landslide_dam_wedge(self, dem_layer, center_point, direction_deg,
                                       side_dip_deg, crest_slope_deg, target_volume_m3,
@@ -590,6 +623,19 @@ class QLandslideDam:
                 Qgis.Info
             )
 
+            # Raster del solo cuneo: spessore del deposito (DEM modificato - DEM originale),
+            # NoData fuori dal corpo della diga
+            max_thickness = float(np.nanmax(thickness)) if np.any(thickness > 0) else 0.0
+            self.save_and_load_raster(
+                numpy_array=np.where(thickness > 0, thickness, np.nan),
+                reference_layer=dem_layer,
+                output_path=os.path.splitext(output_file)[0] + "_wedge_thickness.tif",
+                layer_name=self.tr("Wedge thickness (max {thickness} m)").format(
+                    thickness=f"{max_thickness:.1f}"),
+                nodata_value=-9999.0,
+                color_range=(0.0, max_thickness)
+            )
+
             # =========================================================
             # 2. LAGO DI SBARRAMENTO A MONTE (r.lake di GRASS)
             # =========================================================
@@ -625,12 +671,14 @@ class QLandslideDam:
             }
             dam_results = {
                 'iterations': num_iter, 'volume': vol_calc,
-                'max_thickness': float(np.nanmax(thickness)) if np.any(thickness > 0) else 0.0,
+                'max_thickness': max_thickness,
                 'footprint_area': float(np.count_nonzero(thickness > 0)) * cell_area,
             }
             results_table = None
             if detail_layers:
                 results_table = self._add_results_table(run_params, dam_results, lake, lake_error)
+                # Aggiunto per ultimo, così il punto della frana resta visibile sopra gli altri layer
+                self._add_landslide_point_layer(center_point, dem_layer, loaded_layer, run_params, dam_results)
 
             if lake is not None:
                 seed_x, seed_y = lake['seed']
@@ -711,6 +759,46 @@ class QLandslideDam:
         QgsProject.instance().addMapLayer(layer)
         return layer
 
+    def _add_landslide_point_layer(self, center_point, dem_layer, modified_dem_layer, run_params, dam_results):
+        """
+        Aggiunge alla TOC un layer temporaneo con il punto della frana (punto cliccato
+        sulla mappa o inserito nelle coordinate), con i parametri e i risultati del cuneo.
+        """
+        def sample(layer, point):
+            value, ok = layer.dataProvider().sample(point, 1)
+            return float(value) if ok else None
+
+        layer = QgsVectorLayer("Point", self.tr("Landslide point"), "memory")
+        layer.setCrs(dem_layer.crs())
+        provider = layer.dataProvider()
+        provider.addAttributes([
+            QgsField("x", QVariant.Double),
+            QgsField("y", QVariant.Double),
+            QgsField("dem_elev", QVariant.Double),
+            QgsField("dam_elev", QVariant.Double),
+            QgsField("direction", QVariant.Double),
+            QgsField("side_dip", QVariant.Double),
+            QgsField("crest_slp", QVariant.Double),
+            QgsField("target_vol", QVariant.Double),
+            QgsField("dam_vol", QVariant.Double),
+            QgsField("max_thick", QVariant.Double),
+        ])
+        layer.updateFields()
+
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(QgsGeometry.fromPointXY(center_point))
+        feature.setAttributes([
+            center_point.x(), center_point.y(),
+            sample(dem_layer, center_point), sample(modified_dem_layer, center_point),
+            float(run_params['direction']), float(run_params['side_dip']), float(run_params['crest_slope']),
+            float(run_params['target_volume']), float(dam_results['volume']),
+            float(dam_results['max_thickness']),
+        ])
+        provider.addFeatures([feature])
+        layer.updateExtents()
+        QgsProject.instance().addMapLayer(layer)
+        return layer
+
     def _add_results_table(self, run_params, dam_results, lake, lake_error=None):
         """
         Aggiunge alla TOC una tabella temporanea (senza geometria) con tutti i dati del run:
@@ -726,6 +814,7 @@ class QLandslideDam:
         # Run
         add(self.tr("Run"), self.tr("Date and time"), text=run_time)
         add(self.tr("Run"), self.tr("DEM layer"), text=dem_layer.name())
+        add(self.tr("Run"), self.tr("Input DEM file"), text=dem_layer.source())
         add(self.tr("Run"), self.tr("DEM CRS"), text=dem_layer.crs().authid() or dem_layer.crs().description())
         add(self.tr("Run"), self.tr("DEM cell size X"), dem_layer.rasterUnitsPerPixelX(), "m")
         add(self.tr("Run"), self.tr("DEM cell size Y"), dem_layer.rasterUnitsPerPixelY(), "m")

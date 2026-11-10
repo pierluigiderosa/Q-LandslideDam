@@ -142,6 +142,16 @@
             <translation>Controlla il layer '{layer}'.</translation>
         </message>
         <message>
+            <location filename="../q_landslide_dam.py" line="598" />
+            <source>Wedge thickness (max {thickness} m)</source>
+            <translation>Spessore del cuneo (max {thickness} m)</translation>
+        </message>
+        <message>
+            <location filename="../q_landslide_dam.py" line="724" />
+            <source>Landslide point</source>
+            <translation>Punto della frana</translation>
+        </message>
+        <message>
             <location filename="../q_landslide_dam.py" line="688" />
             <source>Lake - control points</source>
             <translation>Lago - punti di controllo</translation>
@@ -175,6 +185,11 @@
             <location filename="../q_landslide_dam.py" line="728" />
             <source>DEM layer</source>
             <translation>Layer DEM</translation>
+        </message>
+        <message>
+            <location filename="../q_landslide_dam.py" line="817" />
+            <source>Input DEM file</source>
+            <translation>File DEM in input</translation>
         </message>
         <message>
             <location filename="../q_landslide_dam.py" line="729" />
@@ -596,8 +611,8 @@
         </message>
         <message>
             <location filename="../q_landslide_dam_dialog_base.ui" line="284" />
-            <source>Load the detailed results table and the lake upstream/downstream control points as temporary layers in the Layers panel</source>
-            <translation>Carica nel pannello Layer, come layer temporanei, la tabella dei risultati dettagliati e i punti di controllo di monte e di valle del lago</translation>
+            <source>Load the detailed results table, the landslide point and the lake upstream/downstream control points as temporary layers in the Layers panel</source>
+            <translation>Carica nel pannello Layer, come layer temporanei, la tabella dei risultati dettagliati, il punto della frana e i punti di controllo di monte e di valle del lago</translation>
         </message>
         <message>
             <location filename="../q_landslide_dam_dialog_base.ui" line="287" />
@@ -672,7 +687,7 @@ Segnalazione bug: &lt;a href="https://github.com/pierluigiderosa/Q-LandslideDam/
 &lt;li&gt;&lt;i&gt;Volume&lt;/i&gt;: volume of the landslide deposit (m³).&lt;/li&gt;
 &lt;/ul&gt;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Settings&lt;/b&gt;: advanced parameters of the iterative algorithm (vertical step, maximum iterations, maximum radius).&lt;/li&gt;
-&lt;li&gt;&lt;b&gt;Output&lt;/b&gt;: check &lt;i&gt;Save raster permanently&lt;/i&gt; to choose where to save the modified DEM; otherwise it is saved to a temporary folder. &lt;i&gt;Load detailed results table and lake control points&lt;/i&gt; (checked by default) adds the run results table and the lake upstream/downstream control points to the Layers panel as temporary layers; uncheck it to skip them.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Output&lt;/b&gt;: check &lt;i&gt;Save raster permanently&lt;/i&gt; to choose where to save the modified DEM; otherwise it is saved to a temporary folder. &lt;i&gt;Load detailed results table and lake control points&lt;/i&gt; (checked by default) adds the run results table, the landslide point and the lake upstream/downstream control points to the Layers panel as temporary layers; uncheck it to skip them.&lt;/li&gt;
 &lt;li&gt;Press &lt;b&gt;OK&lt;/b&gt; to run the calculation.&lt;/li&gt;
 &lt;/ol&gt;
 &lt;h3&gt;Dam geometry&lt;/h3&gt;
@@ -719,7 +734,9 @@ Segnalazione bug: &lt;a href="https://github.com/pierluigiderosa/Q-LandslideDam/
 &lt;h3&gt;Results&lt;/h3&gt;
 &lt;ul&gt;
 &lt;li&gt;modified DEM including the dam, with hillshade;&lt;/li&gt;
+&lt;li&gt;wedge thickness raster: the dam body alone, with the deposit thickness in metres (NoData outside the dam);&lt;/li&gt;
 &lt;li&gt;upstream dammed lake (computed with GRASS &lt;i&gt;r.lake&lt;/i&gt;) with water level, volume, area and maximum depth;&lt;/li&gt;
+&lt;li&gt;landslide point layer (the point clicked on the map or entered as coordinates), with the wedge parameters and results;&lt;/li&gt;
 &lt;li&gt;lake control points layer;&lt;/li&gt;
 &lt;li&gt;results table with all the details of the run (see below).&lt;/li&gt;
 &lt;/ul&gt;
@@ -735,7 +752,7 @@ Segnalazione bug: &lt;a href="https://github.com/pierluigiderosa/Q-LandslideDam/
 &lt;/ul&gt;
 &lt;p&gt;Main parameters:&lt;/p&gt;
 &lt;ul&gt;
-&lt;li&gt;&lt;b&gt;Run&lt;/b&gt;: date and time, DEM layer, CRS, cell size and path of the output dam DEM;&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Run&lt;/b&gt;: date and time, DEM layer, path of the input DEM, CRS, cell size and path of the output dam DEM;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Input&lt;/b&gt; / &lt;b&gt;Settings&lt;/b&gt;: the values entered in the dialog and in Settings;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Dam&lt;/b&gt;:
 &lt;ul&gt;
@@ -772,7 +789,7 @@ Segnalazione bug: &lt;a href="https://github.com/pierluigiderosa/Q-LandslideDam/
 &lt;li&gt;&lt;i&gt;Volume&lt;/i&gt;: volume del deposito di frana (m³).&lt;/li&gt;
 &lt;/ul&gt;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Impostazioni&lt;/b&gt;: parametri avanzati dell'algoritmo iterativo (passo verticale, iterazioni massime, raggio massimo).&lt;/li&gt;
-&lt;li&gt;&lt;b&gt;Output&lt;/b&gt;: seleziona &lt;i&gt;Salva il raster in modo permanente&lt;/i&gt; per scegliere dove salvare il DEM modificato; altrimenti viene salvato in una cartella temporanea. &lt;i&gt;Carica la tabella dei risultati dettagliati e i punti di controllo del lago&lt;/i&gt; (attivo di default) aggiunge al pannello Layer, come layer temporanei, la tabella dei risultati dell'esecuzione e i punti di controllo di monte e di valle del lago; disattivalo per non caricarli.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Output&lt;/b&gt;: seleziona &lt;i&gt;Salva il raster in modo permanente&lt;/i&gt; per scegliere dove salvare il DEM modificato; altrimenti viene salvato in una cartella temporanea. &lt;i&gt;Carica la tabella dei risultati dettagliati e i punti di controllo del lago&lt;/i&gt; (attivo di default) aggiunge al pannello Layer, come layer temporanei, la tabella dei risultati dell'esecuzione, il punto della frana e i punti di controllo di monte e di valle del lago; disattivalo per non caricarli.&lt;/li&gt;
 &lt;li&gt;Premi &lt;b&gt;OK&lt;/b&gt; per avviare il calcolo.&lt;/li&gt;
 &lt;/ol&gt;
 &lt;h3&gt;Geometria della diga&lt;/h3&gt;
@@ -819,7 +836,9 @@ pendenza   /    \  pendenza
 &lt;h3&gt;Risultati&lt;/h3&gt;
 &lt;ul&gt;
 &lt;li&gt;DEM modificato comprensivo della diga, con rilievo ombreggiato;&lt;/li&gt;
+&lt;li&gt;raster dello spessore del cuneo: il solo corpo della diga, con lo spessore del deposito in metri (NoData fuori dalla diga);&lt;/li&gt;
 &lt;li&gt;lago di sbarramento a monte (calcolato con GRASS &lt;i&gt;r.lake&lt;/i&gt;) con livello dell'acqua, volume, area e profondità massima;&lt;/li&gt;
+&lt;li&gt;layer del punto della frana (il punto cliccato sulla mappa o inserito nelle coordinate), con i parametri e i risultati del cuneo;&lt;/li&gt;
 &lt;li&gt;layer dei punti di controllo del lago;&lt;/li&gt;
 &lt;li&gt;tabella dei risultati con tutti i dettagli dell'esecuzione (vedi sotto).&lt;/li&gt;
 &lt;/ul&gt;
@@ -835,7 +854,7 @@ pendenza   /    \  pendenza
 &lt;/ul&gt;
 &lt;p&gt;Parametri principali:&lt;/p&gt;
 &lt;ul&gt;
-&lt;li&gt;&lt;b&gt;Esecuzione&lt;/b&gt;: data e ora, layer DEM, sistema di riferimento, dimensione della cella e percorso del DEM della diga in output;&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Esecuzione&lt;/b&gt;: data e ora, layer DEM, percorso del DEM in input, sistema di riferimento, dimensione della cella e percorso del DEM della diga in output;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Input&lt;/b&gt; / &lt;b&gt;Impostazioni&lt;/b&gt;: i valori inseriti nella finestra e nelle Impostazioni;&lt;/li&gt;
 &lt;li&gt;&lt;b&gt;Diga&lt;/b&gt;:
 &lt;ul&gt;
